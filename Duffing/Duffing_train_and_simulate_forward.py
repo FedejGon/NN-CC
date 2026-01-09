@@ -105,29 +105,24 @@ delta=0.3
 Omega=1.2
 x0=0.5
 v0=-0.5
+y0 = [x0, v0]  # [x(0), x'(0)]
 
-noise=0.0
+#possible noise to x(t) (commented)
+#noise=0.0
 
-
-
-#friction definition Dietrich-Ruina
-#Ff=0.5 # N
-#a=0.07
-#b=0.09
-##c=0.022
-#Vf=0.003 # m/s
-#epsilon=1e-6 # m/s
 Tsimul=40
 Nsimul=1000
 Tval=2*Tsimul
 Nval=2*Nsimul
-np.random.seed(0) # to have repetitivity
-torch.manual_seed(10)  # Replace 1 with any integer
 
 t_span = (0, Tsimul)  # time interval for training dataset
 t_simul = np.linspace(*t_span, Nsimul)  
 t_span_val = (0, Tval)  # time interval for forward simulation
 t_val = np.linspace(*t_span_val, Nval)   
+
+# Initialization of random number generators 
+np.random.seed(0) # to have repetitivity
+torch.manual_seed(10)  # Replace 1 with any integer
 
 time_chaos_x_SR_list=[]
 time_chaos_x_parametric_list=[]
@@ -155,20 +150,25 @@ rmse_x_dot_LS_list = []
 rmse_x_Sindy_k0_list = []
 rmse_x_dot_Sindy_k0_list = []
 
-
-
-print("EDO: x'' + f1(x') + f2 (x) = F_ext(t)")
-print("S1: stick-slip")
-print("f1(x')= [c*x'+Ff(x')]/m")
-print("f2(x)=[k x]/m")
-print("F_ext(t)=F_ext_true(t)/m")
-printF("EDO: x'' + f1(x') + f2 (x) = F_ext(t)")
-printF("S1: stick-slip")
-printF("f1(x')= [c*x'+Ff(x')]/m")
-printF("f2(x)=[k x]/m")
-printF("F_ext(t)=F_ext_true(t)/m")
-
-
+# Hyperparameters for NN-CC methods
+learning_rate = 1e-4
+epochs_max = 20000
+neurons=100
+error_threshold = 1e-8
+f1_symmetry='odd'
+f2_symmetry='odd'
+lambda_penalty = 1e-4  # You can adjust this weight if needed
+lambda_penalty_symm = 1e1
+apply_restriction=True
+#for testing other activation functions
+#weight_decay = 1e-6 # 0.0 # 1e-6 was the better, 0.0 default
+#momentum=0.99
+    
+printF("ODE: x'' + f1(x') + f2(x) = F_ext(t)")
+printF("Duffing System")
+printF("f1(x')= delta x'")
+printF("f2(x)= alpha x + beta x^3")
+printF("F_ext(t)=Aext cos(Omega t)")
 
 #SNR_dB_list = [np.inf] + list(np.linspace(40, -20, 61 ))  # ∞, 20, 17.5, ..., -5
 SNR_dB_list = [np.inf] + list(np.linspace(40, 5, 36 ))  # ∞, 20, 17.5, ..., -5
@@ -207,7 +207,7 @@ for SNR_dB in SNR_dB_list:
     #print(f"Aext={Aext}, k={kval}, c={cval}")
     #print(f"Omega={Omega}, mu_N={mu_N}, $x_0$={x0}, $v_0$={v0}")
     ##print(rf"$\Omega$={Omega}, $\mu N$={mu_N}, $x_0$={x0}, $v_0$={v0}")
-    print(f"SNR_dB={SNR_dB}")
+    printF(f"SNR_dB={SNR_dB}")
     #alpha=-1.0
     #beta=1.0
     #delta=0.3
@@ -215,25 +215,11 @@ for SNR_dB in SNR_dB_list:
     #v0=-0.5
     #Aext=2.0
     #Omega=1.2
-    print(f"alpha={alpha}, beta={beta}, delta={delta}")
-    print(f"Omega={Omega}, Aext={Aext}, $x_0$={x0}, $v_0$={v0}")
+    
     printF(f"alpha={alpha}, beta={beta}, delta={delta}")
     printF(f"Omega={Omega}, Aext={Aext}, $x_0$={x0}, $v_0$={v0}")
-
-    y0 = [x0, v0]  # [x(0), x'(0)]
     
-    # Hyperparameters for NN
-    learning_rate = 1e-4
-    epochs_max = 20000
-    neurons=100
-    error_threshold = 1e-8
-    f1_symmetry='odd'
-    f2_symmetry='odd'
-    lambda_penalty = 1e-4  # You can adjust this weight if needed
-    lambda_penalty_symm = 1e1
-    apply_restriction=True
-    weight_decay = 1e-6 # 0.0 # 1e-6 was the better, 0.0 default
-    momentum=0.99
+    #Definition of the theoretical functions
     def F1(x_dot):
         return delta * x_dot 
     def F2(x):
@@ -245,66 +231,62 @@ for SNR_dB in SNR_dB_list:
         x_ddot = (F_ext(t) - F1(x_dot) - F2(x))*1.0
         return [x_dot, x_ddot]
 
-    #  1 x'' + 0.1 * x' + 0.5 sign(x') + k * x  = F_ext(t)
+    # ODE: x'' + F1(x_dot) + F2(x) = F_ext(t) 
+    # ODE: x'' + delta x_dot + alpha x + beta x^3 = F_ext(t) 
+    # F_ext(t) = Aext cos(Omega t)
 
-    # EDO: m x'' + c * x' + Ff(x') + k * x  = F_ext(t)
-    # wn=sqrt(k/m)
-    # c=zeta*2*sqrt(k*m)
-    # F_ext= A cos(Omega * t)
-    #Ff={Ff+a*ln[(|x'|+epsilon)/Vf]+b*ln[c+Vf/(|x'|+epsilon)]}sgn(x')
-
-    #def van_der_pol_with_time_F_discontinuous(t,y):
-    #    x, x_dot = y  # x, x', and time
-    #    if x > 1:  # Introducing a discontinuity when x > 1
-    ##        x_ddot = -x  # Ignore the Van der Pol term and set x_ddot to just -x
-    #        f = 2*mu * (2 - x**2)  # Ignore the Van der Pol term and set x_ddot to just -x
-    #    else:
-    #        f = mu * (1 - x**2)  # Original Van der Pol term when x <= 1
-    #    x_ddot = f * x_dot - x
-    #    return [x_dot, x_ddot]
-
-
-    # Generar datos de la EDO con solve_ivp
-    #sol = solve_ivp(van_der_pol_with_time_F, t_span, y0, t_eval=t_eval)
-
-    #sol = solve_ivp(eq_2nd_ord_veloc, t_span, y0, t_eval=t_simul)
-
-    #def stick_event(t, y):
-    #    return y[1]  # Detect when velocity crosses zero
-    #stick_event.terminal = False
-    #stick_event.direction = 0  # Detect all zero crossings
-    #sol = solve_ivp(eq_2nd_ord_veloc, t_span, y0, t_eval=t_simul,
-    #                events=stick_event, method='Radau')
-
-    #sol = solve_ivp(eq_2nd_ord_veloc, t_span, y0, t_eval=t_simul)
-    sol = solve_ivp(eq_2nd_ord_veloc, t_span, y0, t_eval=t_simul,method='LSODA') #LSODA
-
-
+    #Integrate forward the theoretical equation to generate training dataset 
+    sol = solve_ivp(eq_2nd_ord_veloc, t_span, y0, t_eval=t_simul,method='LSODA') 
 
     #, method='BDF', rtol=1e-6, atol=1e-8, dense_output=True)
-    print(sol.status)   # 0 = success, 1 = reached event, -1 = failed
-    print(sol.message)
-
     #, method='DOP853', rtol=1e-9, atol=1e-12)
     #, method='Radau', rtol=1e-6, atol=1e-8
     #, method='BDF'
 
+    #verify that integration was succesful
+    printF(sol.status)   # 0 = success, 1 = reached event, -1 = failed
+    printF(sol.message)
 
-    plt.plot(sol.t, sol.y[0])
+    # extract variables for defining the training dataset 
+    x_data = sol.y[0] # +np.random.normal(0,0.1)*noise      # x
+    x_dot_data = sol.y[1] #+np.random.normal(0,0.01)   # x_dot
+    time_data = sol.t      # Time (x2) 
+    
+    #computing x_ddot_data : 
+    #x_ddot_data = (F_ext_val - F1_th - F2_th) / m
+    # by numerical derivative (greater error)
+    #x_ddot_data = np.gradient(x_dot_data, sol.t)
+    # by evaluating the function (lower error)   
+    x_ddot_data = np.array([eq_2nd_ord_veloc(t, y)[1] for t, y in zip(sol.t, sol.y.T)])
+    
+    plt.figure()
+    plt.title(r"Verifying that the computed $\ddot{x}$ is consistent with the equation")
+    plt.plot(time_data, (x_ddot_data + F1(x_dot_data) + F2(x_data) - F_ext(time_data))**2)
     plt.xlabel("Time")
-    plt.ylabel("x(t)")
-    plt.title("Displacement")
-    plt.grid(True)
+    plt.ylabel(r"Squared Error $(\ddot{x} - \ddot{x}_{model})^2$")
+    plt.grid(True, alpha=0.3)
     plt.show()
+    
+    
+    #plt.plot(time_data, x_data)
+    #plt.xlabel("Time")
+    #plt.ylabel("x(t)")
+    #plt.title("Theoretical data")
+    #plt.grid(True)
+    #plt.show()
 
-
-    x_data = sol.y[0]+np.random.normal(0,0.1)*noise      # Posición
-    x_dot_data = sol.y[1] #+np.random.normal(0,0.01)   # Velocidad
-    time_data = sol.t      # Time (x2)
-
-
-
-
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 5), sharex=True)
+    ax1.plot(time_data, x_data, color='black')
+    ax1.set_ylabel("x(t)")
+    ax1.set_title("Theoretical Data (without noise)")
+    ax1.grid(True)
+    ax2.plot(time_data, F_ext(time_data), color='black', linestyle='-')
+    ax2.set_xlabel("t")
+    ax2.set_ylabel(r"F$_{ext}$")
+    ax2.grid(True)
+    plt.tight_layout()
+    plt.show()    
+    
 
     # Add noise to x_data for a given SNR (in dB)
     #SNR_dB = 0  # desired signal-to-noise ratio in decibels
@@ -319,21 +301,16 @@ for SNR_dB in SNR_dB_list:
     #print(f"Desired SNR: {SNR_dB} dB")
     #print(f"Measured SNR: {snr_measured:.2f} dB")
 
-    # Add noise to x_data for a given SNR (in dB)
-
+    # Add noise to F_ext with a given SNR (in dB)
     if np.isinf(SNR_dB):
-        print("Running with SNR = ∞ dB (no noise)")
-        print("noise=",noise)
         printF("Running with SNR = ∞ dB (no noise)")
-        printF("noise=",noise)
-        F_ext_val = F_ext(time_data)+np.random.normal(0,0.1)*noise
+        #printF("noise=",noise)
+        F_ext_val = F_ext(time_data) #+np.random.normal(0,0.1)*noise
         noise_percentage=0.0
         noise_percentage_th=0.0
     else:
-        print(f"Running with SNR = {SNR_dB:.2f} dB")
         printF(f"Running with SNR = {SNR_dB:.2f} dB")
         # Add noise based on current SNR_dB
-
         #SNR_dB = 4  # desired signal-to-noise ratio in decibels
         Fext_signal_power = np.mean(F_ext(time_data)**2)
         noise_power = Fext_signal_power / (10**(SNR_dB / 10))
@@ -355,26 +332,22 @@ for SNR_dB in SNR_dB_list:
         #F1_th=F1(x_dot_data)
         #F2_th=F2(x_data)
         #F_ext_val = F_ext(time_data)+noise*np.random.normal(0,0.5)
-        print(f"Desired SNR in Fext: {SNR_dB} dB")
-        print(f"Measured SNR in Fext: {snr_measured:.2f} dB")
-        print(f"Noise percentage in Fext: {noise_percentage:.2f}%")
-        print(f"Noise percentage in Fext (theoretical): {noise_percentage_th:.2f}%")
         printF(f"Desired SNR in Fext: {SNR_dB} dB")
         printF(f"Measured SNR in Fext: {snr_measured:.2f} dB")
-        printF(f"Noise percentage in Fext: {noise_percentage:.2f}%")
-        printF(f"Noise percentage in Fext (theoretical): {noise_percentage_th:.2f}%")
-        # --- now apply a Savitzky–Golay filter ---
+        printF(f"Desired noise percentage in Fext: {noise_percentage_th:.2f}%")
+        printF(f"Measured noise percentage in Fext: {noise_percentage:.2f}%")
+        
+        
+        # --- now apply a Savitzky–Golay filter (not used, only for testing) ---
         # choose an odd window length and a small polynomial order
         window_length = 51    # must be odd, e.g. 5, 11, 51, …
         polyorder     = 3     # < window_length
-
         F_ext_filtered = savgol_filter(
             F_ext_val_noisy,
             window_length=window_length,
             polyorder=polyorder,
             mode='interp'       # avoids edge artifacts
         )
-
         # measure the SNR *after* filtering (optional)
         noise_after = F_ext_filtered - F_ext(time_data)
         snr_after   = 10 * np.log10(
@@ -388,50 +361,55 @@ for SNR_dB in SNR_dB_list:
         plt.plot(time_data, F_ext_val_noisy,          label='Fext + noise', alpha=0.7)
         plt.plot(time_data, F_ext_filtered,           label='SG-filtered', linewidth=2)
         plt.xlabel('Time')
-        plt.ylabel('Fₑₓₜ')
+        plt.ylabel(r'F$_{ext}$')
         plt.title('Original vs Noisy vs SG-Filtered Forcing')
         plt.legend()
         plt.tight_layout()
         plt.show()
 
-
         #F_fr=Ff_dr(x_dot_data)
         #F1_th=F1(x_dot_data)
         #F2_th=F2(x_data)
-        F_ext_val = F_ext(time_data)+np.random.normal(0,0.1)*noise
+        # Here we can select different options for the noisy Fext 
+        F_ext_val = F_ext(time_data) #+np.random.normal(0,0.1)*noise
         F_ext_val = F_ext_filtered
         F_ext_val = F_ext_val_noisy
 
+
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 5), sharex=True)
+    ax1.plot(time_data, x_data, color='black')
+    ax1.set_ylabel("x(t)")
+    ax1.set_title("Theoretical Data (with noise)")
+    ax1.grid(True)
+    ax2.plot(time_data, F_ext_val, color='black', linestyle='-')
+    ax2.set_xlabel("t")
+    ax2.set_ylabel(r"F$_{ext}$")
+    ax2.grid(True)
+    plt.tight_layout()
+    plt.show()    
+    
+
     F1_th=F1(x_dot_data)
     F2_th=F2(x_data)
-
     #F1_th_noisy=F1(x_dot_data_noisy)
     #F2_th_noisy=F2(x_data_noisy)
-
-
-    print("minmax_x", np.min(x_data), np.max(x_data))
-    printF("minmax_x", np.min(x_data), np.max(x_data))
-    print("minmax_x_dot", np.min(x_dot_data), np.max(x_dot_data))
-    printF("minmax_x_dot", np.min(x_dot_data), np.max(x_dot_data))
-    #print("minmax_F_ext", np.min(F_ext_val), np.max(F_ext_val))
-
-
-
-
-
-    #F1_th=F1_anderson2009(x_dot_data,F_ext_val)
-    #F2_th=F2_anderson2009(x_data)
-
-
-    #x_ddot_data = (F_ext_val - F1_th - F2_th) / m
-    #x_ddot_data = np.gradient(x_dot_data, sol.t)  # Aceleración (derivada numérica)
-    x_ddot_data = np.array([eq_2nd_ord_veloc(t, y)[1] for t, y in zip(sol.t, sol.y.T)])
-    #x_ddot_data = np.array([eq_2nd_ord_veloc_anderson2009(t, y)[1] for t, y in zip(sol.t, sol.y.T)])
-
-
+    
     plt.figure()
-    plt.plot(time_data,(x_ddot_data-F_ext_val+F1_th+F2_th)**2)
+    plt.title(r"MSE of F$_{ext}$ with and without noise")
+    #plt.plot(time_data, (x_ddot_data - F_ext(time_data) + F1_th + F2_th)**2)
+    #plt.plot(time_data, (x_ddot_data - F_ext_val + F1_th + F2_th)**2)
+    plt.plot(time_data, (F_ext(time_data) - F_ext_val )**2) 
+    plt.xlabel("Time")
+    plt.ylabel(r"Squared Error (F$_{ext}^{noiseless}$ - F$_{ext}^{noise}$)$^2$")
+    plt.grid(True, alpha=0.3)
     plt.show()
+    
+    
+ 
+
+    printF("min(x) , max(x)=", np.min(x_data),",",np.max(x_data))
+    printF(f"min(ẋ) , max(ẋ)= {np.min(x_dot_data)} , {np.max(x_dot_data)}")
+
 
 
 
