@@ -1,0 +1,8 @@
+# Ignore build outputs
+Duffing/outputs/
+Duffing/*.txt
+Duffing/*.pdf
+
+Stick-slip/outputs/
+Stick-slip/*.txt
+Stick-slip/*.pdf
