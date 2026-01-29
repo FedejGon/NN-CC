@@ -56,6 +56,7 @@ Duffing/Figs_F15_F15_Appendix_F/F15ef_SR_CC/*.log
 Stick-slip/outputs/
 Stick-slip/*.txt
 Stick-slip/*.pdf
+Stick-slip/tests_hidden/
 
 Stick-slip/Fig10/outputs/
 Stick-slip/Fig10/tests_hidden/
