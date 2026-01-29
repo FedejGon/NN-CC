@@ -54,21 +54,21 @@ The codes in the root folder provide basic implementation examples. For full rep
 
 ## 🏛️ Citation
 
-If you use this code or methods in your research, please cite the associated manuscript.
+In case of using or adapting some of the codes or methods in your research, please cite the associated manuscript.
 
-
-In case of using NN-CC method, additionally cite:
+Additionally:
+i) In case of using NN-CC method, please cite:
   - Gonzalez, F. J. and Lara, L. P. "[Interpretable neural network system identification method for two families of second-order systems based on characteristic curves](https://doi.org/10.1007/s11071-025-11744-6)." Nonlinear Dyn. 113, 33063–33086 (2025).
 
-In case of using Poly-CC method, additionally cite:
+ii) In case of using Poly-CC method, please cite:
   - Gonzalez, F.J. "[Determination of the characteristic curves of a nonlinear first order system from fourier analysis](https://doi.org/10.1038/s41598-023-29151-5)." Sci. Rep., vol. 13, 1955, (2023).
   - Gonzalez, F.J. "[System identification based on characteristic curves: a mathematical connection between power series and Fourier analysis for first-order nonlinear systems](https://doi.org/10.1007/s11071-024-09890-4)." Nonlinear Dyn. 112, 16167–16197 (2024).
 
-In case of using SINDy-CC methods, additionally cite:
+iii) In case of using SINDy-CC methods, please cite:
   - Kaptanoglu, A.A.; et al. "[PySINDy: A comprehensive Python package for robust sparse system identification](https://doi.org/10.21105/joss.03994)." J. Open Source Softw. vol. 7, 3994, (2021)
   - de Silva, B.M.; et al. "[PySINDy: A Python package for the sparse identification of nonlinear dynamical systems from data](https://doi.org/10.21105/joss.03994)." J. Open Source Softw. vol. 5, 2104, (2020)
 
-In case of using SR-CC variants or post-SR, additionally cite:
+iv) In case of using SR-CC variants or post-SR, please cite:
   - Cranmer, M. "[Interpretable Machine Learning for Science with PySR and SymbolicRegression.jl](https://doi.org/10.48550/arXiv.2305.01582)." arXiv preprint arXiv:2305.01582 (2023).
 
 
