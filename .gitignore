@@ -1,86 +1,69 @@
 # Ignore outputs
 *.txt
 *.pdf
+*.log
 outputs/
+tests_hidden/
 
-Duffing/outputs/
-Duffing/*.txt
-Duffing/*.pdf
-Duffing/tests_hidden
+!Duffing/Fig3/Fig3ab.pdf
+!Duffing/Fig3/Fig3cd_CC_duffing.pdf
+!Duffing/Fig4_abde/Fig4a.pdf
+!Duffing/Fig4_abde/Fig4b.pdf
+!Duffing/Fig4_abde/Fig4d.pdf
+!Duffing/Fig4_abde/Fig4e.pdf
+!Duffing/Fig4_abde/f2_residuals_data_100.txt
 
+!Duffing/Fig4_cf/f2_residuals_data_10_augmentation.txt
+!Duffing/Fig4_cf/Fig4c_global_stats_range_nosym.pdf
+!Duffing/Fig4_cf/Fig4f_global_stats_range_sym.pdf
 
+!Duffing/Fig5_and_8/NN-CC/Fig*.pdf
+!Duffing/Fig5_and_8/NN-CC/rmse_results_for_f1_and_f2.pdf
+!Duffing/Fig5_and_8/NN-CC/times_noise_chaos_duffing_SR_and_param.pdf
+!Duffing/Fig5_and_8/SINDy_Poly/Fig*.pdf
+!Duffing/Fig5_and_8/SINDy_Poly/rmse_results_for_f1_and_f2.pdf
+!Duffing/Fig5_and_8/SINDy_Poly/times_noise_chaos_duffing_SR_and_param.pdf
+!Duffing/Fig5_and_8/SR-CC/Fig*.pdf
+!Duffing/Fig5_and_8/SR-CC/rmse_results_for_f1_and_f2.pdf
+!Duffing/Fig5_and_8/SR-CC/times_noise_chaos_duffing_SR_and_param.pdf
 
-Duffing/Fig4_abde/*.pdf
-Duffing/Fig4_cf/*.pdf
+!Duffing/Fig6_ICs/Fig*.pdf
+!Duffing/Fig7_phase_space/Fig*.pdf
 
+!Duffing/Figs_F14_F15_Appendix_F/Fig*.pdf
+!Duffing/Figs_F14_F15_Appendix_F/F15ab_NN_CC/rmse_results_for_f1_and_f2.txt
+!Duffing/Figs_F14_F15_Appendix_F/F15ab_NN_CC/Fig*.pdf
+!Duffing/Figs_F14_F15_Appendix_F/F15cd_SINDy_Poly_CC/rmse_results_for_f1_and_f2.txt
+!Duffing/Figs_F14_F15_Appendix_F/F15cd_SINDy_Poly_CC/Fig*.pdf
+!Duffing/Figs_F14_F15_Appendix_F/F15ef_SR_CC/rmse_results_for_f1_and_f2.txt
+!Duffing/Figs_F14_F15_Appendix_F/F15ef_SR_CC/Fig*.pdf
 
-Duffing/tests_hidden/
-Duffing/Fig3/tests_hidden/
-Duffing/Fig3/*.txt
-Duffing/Fig3/outputs
-
-Duffing/Fig4_abde/dataset*.pdf
-Duffing/Fig4_abde/global*.pdf
-
-Duffing/Fig4_cf/dataset*.pdf
-Duffing/Fig4_cf/global*.pdf
-Duffing/Fig4_cf/tests_hidden/
-
-Duffing/Fig5_and_8/NN-CC/tests_hidden/
-Duffing/Fig5_and_8/SINDy_Poly/tests_hidden/
-Duffing/Fig5_and_8/SINDy_Poly/outputs/
-Duffing/Fig5_and_8/SR-CC/tests_hidden/
-Duffing/Fig5_and_8/SR-CC/outputs
-Duffing/Fig5_and_8/SR-CC/sr_warnings.log
-Duffing/Fig5_and_8/SR-CC/output.txt
-
-Duffing/Fig6_ICs/*.txt
-Duffing/Fig6_ICs/outputs/
-Duffing/Fig6_ICs/time*.pdf
-
-Duffing/Fig7_phase_space/output_log.txt
-
-Duffing/Figs_F15_F15_Appendix_F/tests_hidden/
-Duffing/Figs_F15_F15_Appendix_F/F15ab_NN_CC/outputs/
-Duffing/Figs_F15_F15_Appendix_F/F15ab_NN_CC/output_log.txt
-Duffing/Figs_F15_F15_Appendix_F/F15cd_SINDy_Poly_CC/outputs/
-Duffing/Figs_F15_F15_Appendix_F/F15cd_SINDy_Poly_CC/output_log.txt
-Duffing/Figs_F15_F15_Appendix_F/F15cd_SINDy_Poly_CC/tests_hidden
-
-Duffing/Figs_F15_F15_Appendix_F/F15ef_SR_CC/outputs/
-Duffing/Figs_F15_F15_Appendix_F/F15ef_SR_CC/output.txt
-Duffing/Figs_F15_F15_Appendix_F/F15ef_SR_CC/tests_hidden/
-Duffing/Figs_F15_F15_Appendix_F/F15ef_SR_CC/*.log
+!Duffing/other_extra_tests/test_parametric_variants/rmse*.pdf
+!Duffing/other_extra_tests/test_parametric_variants/rmse_results_for_f1_and_f2.txt
+!Duffing/other_extra_tests/test_parametric_variants/rmse_noise_duffing_NN_without_symmetry.txt
 
 
-Stick-slip/outputs/
-Stick-slip/*.txt
-Stick-slip/*.pdf
-Stick-slip/tests_hidden/
+!Stick-slip/Fig10/Fig*.pdf
 
-Stick-slip/Fig10/outputs/
-Stick-slip/Fig10/tests_hidden/
-Stick-slip/Fig10/output_log.txt
-Stick-slip/Fig10/*.txt
+!Stick-slip/Fig11_Fig12_CCs_and_RMSE/NN-CC/rmse_noise_duffing_NN_without_symmetry.txt
+!Stick-slip/Fig11_Fig12_CCs_and_RMSE/NN-CC/rmse_results_for_f1_and_f2.txt
+!Stick-slip/Fig11_Fig12_CCs_and_RMSE/NN-CC/Fig*.pdf
 
-Stick-slip/Fig11_Fig12_CCs_and_RMSE/NN-CC/tests_hidden/
-Stick-slip/Fig11_Fig12_CCs_and_RMSE/NN-CC/output.txt
-Stick-slip/Fig11_Fig12_CCs_and_RMSE/NN-CC/output_log.txt
-Stick-slip/Fig11_Fig12_CCs_and_RMSE/tests_hidden/
+!Stick-slip/Fig11_Fig12_CCs_and_RMSE/SINDy_Poly/rmse_results_for_f1_and_f2.txt
+!Stick-slip/Fig11_Fig12_CCs_and_RMSE/SINDy_Poly/rmse_noise_x_xdot.txt
+!Stick-slip/Fig11_Fig12_CCs_and_RMSE/SINDy_Poly/Fig*.pdf
 
-Stick-slip/Fig11_Fig12_CCs_and_RMSE/SINDy_Poly/tests_hidden/
-Stick-slip/Fig11_Fig12_CCs_and_RMSE/SINDy_Poly/output.txt
-Stick-slip/Fig11_Fig12_CCs_and_RMSE/SINDy_Poly/output_log.txt
+!Stick-slip/Fig11_Fig12_CCs_and_RMSE/SR-CC/rmse_results_for_f1_and_f2.txt
+!Stick-slip/Fig11_Fig12_CCs_and_RMSE/SR-CC/rmse_noise_duffing_SR_CC.txt
+!Stick-slip/Fig11_Fig12_CCs_and_RMSE/SR-CC/Fig*.pdf
 
-Stick-slip/Fig11_Fig12_CCs_and_RMSE/SR-CC/tests_hidden/
-Stick-slip/Fig11_Fig12_CCs_and_RMSE/SR-CC/output.txt
-Stick-slip/Fig11_Fig12_CCs_and_RMSE/SR-CC/outputs/
-Stick-slip/Fig11_Fig12_CCs_and_RMSE/SR-CC/*.log
-
-Stick-slip/FigF16_F17_Appendix_F/output_log.txt
-Stick-slip/FigF16_F17_Appendix_F/NN_CC/tests_hidden/
-Stick-slip/FigF16_F17_Appendix_F/SINDy_Poly_CC/tests_hidden/
-Stick-slip/FigF16_F17_Appendix_F/SR_CC/tests_hidden/
+!Stick-slip/FigF16_F17_Appendix_F/Fig*.pdf
+!Stick-slip/FigF16_F17_Appendix_F/NN_CC/Fig*.pdf
+!Stick-slip/FigF16_F17_Appendix_F/NN_CC/rmse_results_for_f1_and_f2.txt
+!Stick-slip/FigF16_F17_Appendix_F/SINDy_Poly_CC/Fig*.pdf
+!Stick-slip/FigF16_F17_Appendix_F/SINDy_Poly_CC/rmse_results_for_f1_and_f2.txt
+!Stick-slip/FigF16_F17_Appendix_F/SR_CC/Fig*.pdf
+!Stick-slip/FigF16_F17_Appendix_F/SR_CC/rmse_results_for_f1_and_f2.txt
 
 
 
