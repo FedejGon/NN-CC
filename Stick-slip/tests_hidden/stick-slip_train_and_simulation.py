@@ -98,31 +98,57 @@ if torch.cuda.is_available():
 #m=1.0
 
 #parameters duffing
-Aext=0.5
-alpha=-1.0
-beta=1.0
-delta=0.3
-Omega=1.2
-x0=0.5
-v0=-0.5
-y0 = [x0, v0]  # [x(0), x'(0)]
+#Aext=0.5
+#alpha=-1.0
+#beta=1.0
+#delta=0.3
+#Omega=1.2
+#x0=0.5
+#v0=-0.5
 
-#possible noise to x(t) (commented)
-#noise=0.0
+#parameters stick slip
+m=1.0 # kg
+cval=0.386 #0.1 # Ns/m (viscous damping coefficient)
+kval=1.274 # 1.0 # N/m (stiffness)
+Aext=2 # N (forcing amplitude)
+Omega=0.3 # 0.3 and 0.15 rad/s (forcing frequency)
+x0=-0.076 #0.1 # m (initial displacement)
+v0=0.146 #0.1 # m/s (initial velocity)
+mu_N = 0.801 # 0.5 #0.5
 
+x0_val=0.458
+v0_val=0.033
+F0_val=1.384
+Omega_val=0.578
+
+
+
+
+
+noise=0.0
+
+
+
+#friction definition
+#Ff=0.5 # N
+#a=0.07
+#b=0.09
+##c=0.022
+#Vf=0.003 # m/s
+#epsilon=1e-6 # m/s
 Tsimul=40
 Nsimul=1000
-Tval=2*Tsimul
-Nval=2*Nsimul
+Tval=1*Tsimul
+Nval=1*Nsimul
 
-t_span = (0, Tsimul)  # time interval for training dataset
-t_simul = np.linspace(*t_span, Nsimul)  
-t_span_val = (0, Tval)  # time interval for forward simulation
-t_val = np.linspace(*t_span_val, Nval)   
 
-# Initialization of random number generators 
-np.random.seed(0) # to have repetitivity
-torch.manual_seed(10)  # Replace 1 with any integer
+#np.random.seed(0) # to have repetitivity
+#torch.manual_seed(10)  # Replace 1 with any integer
+
+t_span = (0, Tsimul)  # Intervalo de tiempo
+t_simul = np.linspace(*t_span, Nsimul)  # Puntos de evaluación
+t_span_val = (0, Tval)  # Intervalo de tiempo
+t_val = np.linspace(*t_span_val, Nval)  # Puntos de evaluación
 
 time_chaos_x_SR_list=[]
 time_chaos_x_parametric_list=[]
@@ -150,25 +176,20 @@ rmse_x_dot_LS_list = []
 rmse_x_Sindy_k0_list = []
 rmse_x_dot_Sindy_k0_list = []
 
-# Hyperparameters for NN-CC methods
-learning_rate = 1e-4
-epochs_max = 20000
-neurons=100
-error_threshold = 1e-8
-f1_symmetry='odd'
-f2_symmetry='odd'
-lambda_penalty = 1e-4  # You can adjust this weight if needed
-lambda_penalty_symm = 1e1
-apply_restriction=True
-#for testing other activation functions
-#weight_decay = 1e-6 # 0.0 # 1e-6 was the better, 0.0 default
-#momentum=0.99
-    
-printF("ODE: x'' + f1(x') + f2(x) = F_ext(t)")
-printF("Duffing System")
-printF("f1(x')= delta x'")
-printF("f2(x)= alpha x + beta x^3")
-printF("F_ext(t)=Aext cos(Omega t)")
+
+
+print("EDO: x'' + f1(x') + f2 (x) = F_ext(t)")
+print("S1: stick-slip")
+print("f1(x')= [c*x'+Ff(x')]/m")
+print("f2(x)=[k x]/m")
+print("F_ext(t)=F_ext_true(t)/m")
+printF("EDO: x'' + f1(x') + f2 (x) = F_ext(t)")
+printF("S1: stick-slip")
+printF("f1(x')= [c*x'+Ff(x')]/m")
+printF("f2(x)=[k x]/m")
+printF("F_ext(t)=F_ext_true(t)/m")
+
+
 
 #SNR_dB_list = [np.inf] + list(np.linspace(40, -20, 61 ))  # ∞, 20, 17.5, ..., -5
 SNR_dB_list = [np.inf] + list(np.linspace(40, 5, 36 ))  # ∞, 20, 17.5, ..., -5
@@ -207,7 +228,7 @@ for SNR_dB in SNR_dB_list:
     #print(f"Aext={Aext}, k={kval}, c={cval}")
     #print(f"Omega={Omega}, mu_N={mu_N}, $x_0$={x0}, $v_0$={v0}")
     ##print(rf"$\Omega$={Omega}, $\mu N$={mu_N}, $x_0$={x0}, $v_0$={v0}")
-    printF(f"SNR_dB={SNR_dB}")
+    print(f"SNR_dB={SNR_dB}")
     #alpha=-1.0
     #beta=1.0
     #delta=0.3
@@ -215,78 +236,122 @@ for SNR_dB in SNR_dB_list:
     #v0=-0.5
     #Aext=2.0
     #Omega=1.2
+    #duffing 
+    #print(f"alpha={alpha}, beta={beta}, delta={delta}")
+    #print(f"Omega={Omega}, Aext={Aext}, $x_0$={x0}, $v_0$={v0}")
+    #printF(f"alpha={alpha}, beta={beta}, delta={delta}")
+    #printF(f"Omega={Omega}, Aext={Aext}, $x_0$={x0}, $v_0$={v0}")
+
+
+    #stick-slip
+    print(f"Aext={Aext}, k={kval}, c={cval}")
+    print(f"Omega={Omega}, mu_N={mu_N}, $x_0$={x0}, $v_0$={v0}")
+    print(r"$\Omega$={Omega}, $\mu N$={mu_N}, $x_0$={x0}, $v_0$={v0}")
+    print(f"SNR_dB={SNR_dB}")
+
+    y0 = [x0, v0]  # [x(0), x'(0)]
     
-    printF(f"alpha={alpha}, beta={beta}, delta={delta}")
-    printF(f"Omega={Omega}, Aext={Aext}, $x_0$={x0}, $v_0$={v0}")
-    
-    #Definition of the theoretical functions
+    # Hyperparameters for NN
+    learning_rate = 1e-4
+    epochs_max = 20000
+    neurons=100
+    error_threshold = 1e-8
+    f1_symmetry='odd'
+    f2_symmetry='odd'
+    lambda_penalty = 1e-2  # You can adjust this weight if needed
+    lambda_penalty_symm = 1e1
+    apply_restriction=True
+    weight_decay = 1e-6 # 0.0 # 1e-6 was the better, 0.0 default
+    N_constraint = 1000
+    momentum = 0.99
+    #duffing
+#    def F1(x_dot):
+#        return delta * x_dot
+#    def F2(x):
+#        return alpha*x+beta*x**3
+#    def F_ext(t):
+#        return Aext*np.cos(Omega*t)
+#    def eq_2nd_ord_veloc(t,y):
+#        x, x_dot = y  # y=[x, x']
+#        x_ddot = (F_ext(t) - F1(x_dot) - F2(x))*1.0
+#        return [x_dot, x_ddot]
+
+    #stick-slip
+    def smooth_sign(x, alpha=500):
+        return np.tanh(alpha * x)
+    def Ff_coul(x_dot):
+     #   return mu_N * np.sign(x_dot)
+        return mu_N * smooth_sign(x_dot)
     def F1(x_dot):
-        return delta * x_dot 
+        return cval* x_dot + Ff_coul(x_dot) #delta * x_dot #+ Ff_coul(x_dot) #cval* x_dot + Ff_coul(x_dot) # + 0.0005 * x_dot**2 #+ Ff_coul(x_dot) #r(x_dot) Ff_coul Ff_dr
     def F2(x):
-        return alpha*x+beta*x**3 
+        return kval*x # alpha*x+beta*x**3 #kval*x
     def F_ext(t):
         return Aext*np.cos(Omega*t)
     def eq_2nd_ord_veloc(t,y):
         x, x_dot = y  # y=[x, x']
-        x_ddot = (F_ext(t) - F1(x_dot) - F2(x))*1.0
+        x_ddot = (F_ext(t) - F1(x_dot) - F2(x))/m
         return [x_dot, x_ddot]
+    #  1 x'' + 0.1 * x' + 0.5 sign(x') + k * x  = F_ext(t)
 
-    # ODE: x'' + F1(x_dot) + F2(x) = F_ext(t) 
-    # ODE: x'' + delta x_dot + alpha x + beta x^3 = F_ext(t) 
-    # F_ext(t) = Aext cos(Omega t)
+    # EDO: m x'' + c * x' + Ff(x') + k * x  = F_ext(t)
+    # wn=sqrt(k/m)
+    # c=zeta*2*sqrt(k*m)
+    # F_ext= A cos(Omega * t)
+    #Ff={Ff+a*ln[(|x'|+epsilon)/Vf]+b*ln[c+Vf/(|x'|+epsilon)]}sgn(x')
 
-    #Integrate forward the theoretical equation to generate training dataset 
-    sol = solve_ivp(eq_2nd_ord_veloc, t_span, y0, t_eval=t_simul,method='LSODA') 
+    #def van_der_pol_with_time_F_discontinuous(t,y):
+    #    x, x_dot = y  # x, x', and time
+    #    if x > 1:  # Introducing a discontinuity when x > 1
+    ##        x_ddot = -x  # Ignore the Van der Pol term and set x_ddot to just -x
+    #        f = 2*mu * (2 - x**2)  # Ignore the Van der Pol term and set x_ddot to just -x
+    #    else:
+    #        f = mu * (1 - x**2)  # Original Van der Pol term when x <= 1
+    #    x_ddot = f * x_dot - x
+    #    return [x_dot, x_ddot]
+
+
+    # Generar datos de la EDO con solve_ivp
+    #sol = solve_ivp(van_der_pol_with_time_F, t_span, y0, t_eval=t_eval)
+
+    #sol = solve_ivp(eq_2nd_ord_veloc, t_span, y0, t_eval=t_simul)
+
+    #def stick_event(t, y):
+    #    return y[1]  # Detect when velocity crosses zero
+    #stick_event.terminal = False
+    #stick_event.direction = 0  # Detect all zero crossings
+    #sol = solve_ivp(eq_2nd_ord_veloc, t_span, y0, t_eval=t_simul,
+    #                events=stick_event, method='Radau')
+
+    #sol = solve_ivp(eq_2nd_ord_veloc, t_span, y0, t_eval=t_simul)
+    sol = solve_ivp(eq_2nd_ord_veloc, t_span, y0, t_eval=t_simul,method='LSODA') #LSODA
+
+
 
     #, method='BDF', rtol=1e-6, atol=1e-8, dense_output=True)
+    print(sol.status)   # 0 = success, 1 = reached event, -1 = failed
+    print(sol.message)
+
     #, method='DOP853', rtol=1e-9, atol=1e-12)
     #, method='Radau', rtol=1e-6, atol=1e-8
     #, method='BDF'
 
-    #verify that integration was succesful
-    printF(sol.status)   # 0 = success, 1 = reached event, -1 = failed
-    printF(sol.message)
 
-    # extract variables for defining the training dataset 
-    x_data = sol.y[0] # +np.random.normal(0,0.1)*noise      # x
-    x_dot_data = sol.y[1] #+np.random.normal(0,0.01)   # x_dot
-    time_data = sol.t      # Time (x2) 
-    
-    #computing x_ddot_data : 
-    #x_ddot_data = (F_ext_val - F1_th - F2_th) / m
-    # by numerical derivative (greater error)
-    #x_ddot_data = np.gradient(x_dot_data, sol.t)
-    # by evaluating the function (lower error)   
-    x_ddot_data = np.array([eq_2nd_ord_veloc(t, y)[1] for t, y in zip(sol.t, sol.y.T)])
-    
-    plt.figure()
-    plt.title(r"Verifying that the computed $\ddot{x}$ is consistent with the equation")
-    plt.plot(time_data, (x_ddot_data + F1(x_dot_data) + F2(x_data) - F_ext(time_data))**2)
+    plt.plot(sol.t, sol.y[0])
     plt.xlabel("Time")
-    plt.ylabel(r"Squared Error $(\ddot{x} - \ddot{x}_{model})^2$")
-    plt.grid(True, alpha=0.3)
+    plt.ylabel("x(t)")
+    plt.title("Displacement")
+    plt.grid(True)
     plt.show()
-    
-    
-    #plt.plot(time_data, x_data)
-    #plt.xlabel("Time")
-    #plt.ylabel("x(t)")
-    #plt.title("Theoretical data")
-    #plt.grid(True)
-    #plt.show()
 
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 5), sharex=True)
-    ax1.plot(time_data, x_data, color='black')
-    ax1.set_ylabel("x(t)")
-    ax1.set_title("Theoretical Data (without noise)")
-    ax1.grid(True)
-    ax2.plot(time_data, F_ext(time_data), color='black', linestyle='-')
-    ax2.set_xlabel("t")
-    ax2.set_ylabel(r"F$_{ext}$")
-    ax2.grid(True)
-    plt.tight_layout()
-    plt.show()    
-    
+
+    x_data = sol.y[0]+np.random.normal(0,0.1)*noise      # Posición
+    x_dot_data = sol.y[1] #+np.random.normal(0,0.01)   # Velocidad
+    time_data = sol.t      # Time (x2)
+
+
+
+
 
     # Add noise to x_data for a given SNR (in dB)
     #SNR_dB = 0  # desired signal-to-noise ratio in decibels
@@ -301,16 +366,21 @@ for SNR_dB in SNR_dB_list:
     #print(f"Desired SNR: {SNR_dB} dB")
     #print(f"Measured SNR: {snr_measured:.2f} dB")
 
-    # Add noise to F_ext with a given SNR (in dB)
+    # Add noise to x_data for a given SNR (in dB)
+
     if np.isinf(SNR_dB):
+        print("Running with SNR = ∞ dB (no noise)")
+        print("noise=",noise)
         printF("Running with SNR = ∞ dB (no noise)")
-        #printF("noise=",noise)
-        F_ext_val = F_ext(time_data) #+np.random.normal(0,0.1)*noise
+        printF("noise=",noise)
+        F_ext_val = F_ext(time_data)+np.random.normal(0,0.1)*noise
         noise_percentage=0.0
         noise_percentage_th=0.0
     else:
+        print(f"Running with SNR = {SNR_dB:.2f} dB")
         printF(f"Running with SNR = {SNR_dB:.2f} dB")
         # Add noise based on current SNR_dB
+
         #SNR_dB = 4  # desired signal-to-noise ratio in decibels
         Fext_signal_power = np.mean(F_ext(time_data)**2)
         noise_power = Fext_signal_power / (10**(SNR_dB / 10))
@@ -332,22 +402,26 @@ for SNR_dB in SNR_dB_list:
         #F1_th=F1(x_dot_data)
         #F2_th=F2(x_data)
         #F_ext_val = F_ext(time_data)+noise*np.random.normal(0,0.5)
+        print(f"Desired SNR in Fext: {SNR_dB} dB")
+        print(f"Measured SNR in Fext: {snr_measured:.2f} dB")
+        print(f"Noise percentage in Fext: {noise_percentage:.2f}%")
+        print(f"Noise percentage in Fext (theoretical): {noise_percentage_th:.2f}%")
         printF(f"Desired SNR in Fext: {SNR_dB} dB")
         printF(f"Measured SNR in Fext: {snr_measured:.2f} dB")
-        printF(f"Desired noise percentage in Fext: {noise_percentage_th:.2f}%")
-        printF(f"Measured noise percentage in Fext: {noise_percentage:.2f}%")
-        
-        
-        # --- now apply a Savitzky–Golay filter (not used, only for testing) ---
+        printF(f"Noise percentage in Fext: {noise_percentage:.2f}%")
+        printF(f"Noise percentage in Fext (theoretical): {noise_percentage_th:.2f}%")
+        # --- now apply a Savitzky–Golay filter ---
         # choose an odd window length and a small polynomial order
         window_length = 51    # must be odd, e.g. 5, 11, 51, …
         polyorder     = 3     # < window_length
+
         F_ext_filtered = savgol_filter(
             F_ext_val_noisy,
             window_length=window_length,
             polyorder=polyorder,
             mode='interp'       # avoids edge artifacts
         )
+
         # measure the SNR *after* filtering (optional)
         noise_after = F_ext_filtered - F_ext(time_data)
         snr_after   = 10 * np.log10(
@@ -361,55 +435,50 @@ for SNR_dB in SNR_dB_list:
         plt.plot(time_data, F_ext_val_noisy,          label='Fext + noise', alpha=0.7)
         plt.plot(time_data, F_ext_filtered,           label='SG-filtered', linewidth=2)
         plt.xlabel('Time')
-        plt.ylabel(r'F$_{ext}$')
+        plt.ylabel('Fₑₓₜ')
         plt.title('Original vs Noisy vs SG-Filtered Forcing')
         plt.legend()
         plt.tight_layout()
         plt.show()
 
+
         #F_fr=Ff_dr(x_dot_data)
         #F1_th=F1(x_dot_data)
         #F2_th=F2(x_data)
-        # Here we can select different options for the noisy Fext 
-        F_ext_val = F_ext(time_data) #+np.random.normal(0,0.1)*noise
+        F_ext_val = F_ext(time_data)+np.random.normal(0,0.1)*noise
         F_ext_val = F_ext_filtered
         F_ext_val = F_ext_val_noisy
 
-
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 5), sharex=True)
-    ax1.plot(time_data, x_data, color='black')
-    ax1.set_ylabel("x(t)")
-    ax1.set_title("Theoretical Data (with noise)")
-    ax1.grid(True)
-    ax2.plot(time_data, F_ext_val, color='black', linestyle='-')
-    ax2.set_xlabel("t")
-    ax2.set_ylabel(r"F$_{ext}$")
-    ax2.grid(True)
-    plt.tight_layout()
-    plt.show()    
-    
-
     F1_th=F1(x_dot_data)
     F2_th=F2(x_data)
+
     #F1_th_noisy=F1(x_dot_data_noisy)
     #F2_th_noisy=F2(x_data_noisy)
-    
+
+
+    print("minmax_x", np.min(x_data), np.max(x_data))
+    printF("minmax_x", np.min(x_data), np.max(x_data))
+    print("minmax_x_dot", np.min(x_dot_data), np.max(x_dot_data))
+    printF("minmax_x_dot", np.min(x_dot_data), np.max(x_dot_data))
+    #print("minmax_F_ext", np.min(F_ext_val), np.max(F_ext_val))
+
+
+
+
+
+    #F1_th=F1_anderson2009(x_dot_data,F_ext_val)
+    #F2_th=F2_anderson2009(x_data)
+
+
+    #x_ddot_data = (F_ext_val - F1_th - F2_th) / m
+    #x_ddot_data = np.gradient(x_dot_data, sol.t)  # Aceleración (derivada numérica)
+    x_ddot_data = np.array([eq_2nd_ord_veloc(t, y)[1] for t, y in zip(sol.t, sol.y.T)])
+    #x_ddot_data = np.array([eq_2nd_ord_veloc_anderson2009(t, y)[1] for t, y in zip(sol.t, sol.y.T)])
+
+
     plt.figure()
-    plt.title(r"MSE of F$_{ext}$ with and without noise")
-    #plt.plot(time_data, (x_ddot_data - F_ext(time_data) + F1_th + F2_th)**2)
-    #plt.plot(time_data, (x_ddot_data - F_ext_val + F1_th + F2_th)**2)
-    plt.plot(time_data, (F_ext(time_data) - F_ext_val )**2) 
-    plt.xlabel("Time")
-    plt.ylabel(r"Squared Error (F$_{ext}^{noiseless}$ - F$_{ext}^{noise}$)$^2$")
-    plt.grid(True, alpha=0.3)
+    plt.plot(time_data,(x_ddot_data-F_ext_val+F1_th+F2_th)**2)
     plt.show()
-    
-    
- 
-
-    printF("min(x) , max(x)=", np.min(x_data),",",np.max(x_data))
-    printF(f"min(ẋ) , max(ẋ)= {np.min(x_dot_data)} , {np.max(x_dot_data)}")
-
 
 
 
@@ -514,41 +583,69 @@ for SNR_dB in SNR_dB_list:
 #    plt.show()
 
 
+
+
     ############# Parametric  #################   least squares
 
     ##### method 1 BEST ####
     # Right-hand side
     rhs = F_ext_val -  x_ddot_data # m *
     # Design matrix: [x_dot, x, x^3]
+    # Duffing
+#    A = np.vstack([
+#        x_dot_data,
+#        x_data,
+#        x_data**3
+#    ]).T  # shape: (N, 3)
+    # Stick-slip
     A = np.vstack([
         x_dot_data,
         x_data,
-        x_data**3
+        np.tanh(500 * x_dot_data)  # smooth sign for Coulomb
+        #x_data**3
     ]).T  # shape: (N, 3)
     # Solve least squares: A @ [delta, alpha, beta] = rhs
     start = time.time()
     params, _, _, _ = np.linalg.lstsq(A, rhs, rcond=None)
-    delta_ident_param, alpha_ident_param, beta_ident_param = params
+    # Duffing
+    #delta_ident_param, alpha_ident_param, beta_ident_param = params
+    #stick-slip
+    c_ident_param, k_ident_param, mu_ident_param = params
     print("Parametric model")
     end = time.time()  
     elapsed = end - start
     print(f"Training finished in {elapsed:.3f} seconds")
     printF(f"Training finished in {elapsed:.3f} seconds")
     print("theoretical values")
-    print(f"delta = {delta:.6e}, alpha = {alpha:.6e}, beta = {beta:.6e}")
+    # Duffing
+    #print(f"delta = {delta:.6e}, alpha = {alpha:.6e}, beta = {beta:.6e}")
+    #print("identified values")
+    #print(f"delta = {delta_ident_param:.6e}, alpha = {alpha_ident_param:.6e}, beta = {beta_ident_param:.6e}")
+
+    #stick-slip
+    print(f"c = {cval:.6e}, k = {kval:.6e}, mu*N = {mu_N:.6e}")
     print("identified values")
-    print(f"delta = {delta_ident_param:.6e}, alpha = {alpha_ident_param:.6e}, beta = {beta_ident_param:.6e}")
+    print(f"c = {c_ident_param:.6e}, k = {k_ident_param:.6e}, mu*N = {mu_ident_param:.6e}")
 
+    #Duffing
+#    def ode_param(t, state):
+#        x, xdot = state
+#        xddot = (F_ext(t) - delta_ident_param*xdot - alpha_ident_param*x - beta_ident_param*x**3) # / m
+#        return [xdot, xddot]
+#    def f1_param(x_dot):
+#        return delta_ident_param * x_dot
+#    def f2_param(x):
+#        return alpha_ident_param * x + beta_ident_param * x**3
 
+    #stick-slip
     def ode_param(t, state):
         x, xdot = state
-        xddot = (F_ext(t) - delta_ident_param*xdot - alpha_ident_param*x - beta_ident_param*x**3) # / m
+        xddot = (F_ext(t) - c_ident_param*xdot - k_ident_param*x - mu_ident_param*np.tanh(500 * xdot) ) / m
         return [xdot, xddot]
     def f1_param(x_dot):
-        return delta_ident_param * x_dot
+        return c_ident_param * x_dot + mu_ident_param * np.tanh(500 * x_dot)
     def f2_param(x):
-        return alpha_ident_param * x + beta_ident_param * x**3
-    
+        return k_ident_param * x    
     
     # Integrate over same time range as data
     t_span = (time_data[0], time_data[-1])
@@ -572,43 +669,46 @@ for SNR_dB in SNR_dB_list:
     plt.show()
 
 
-    ##### method 2 ####
-    # Example weights: you can also compute based on noise variance
-    weights = 1 / (np.abs(x_ddot_data) + 1e-6)  # Avoid division by zero
-    # Apply weights
-    W = np.diag(weights)
-    A_weighted = W @ A
-    rhs_weighted = W @ rhs
-    params2, _, _, _ = np.linalg.lstsq(A_weighted, rhs_weighted, rcond=None)
-    delta_ident2, alpha_ident2, beta_ident2 = params2
-    print("theoretical values")
-    print(f"delta = {delta:.6e}, alpha = {alpha:.6e}, beta = {beta:.6e}")
-    print("identified values")
-    print(f"delta = {delta_ident2:.6e}, alpha = {alpha_ident2:.6e}, beta = {beta_ident2:.6e}")
+#    ##### method 2 ####
+#    # Example weights: you can also compute based on noise variance
+#    weights = 1 / (np.abs(x_ddot_data) + 1e-6)  # Avoid division by zero
+#    # Apply weights
+#    W = np.diag(weights)
+#    A_weighted = W @ A
+#    rhs_weighted = W @ rhs
+#    params2, _, _, _ = np.linalg.lstsq(A_weighted, rhs_weighted, rcond=None)
+#    delta_ident2, alpha_ident2, beta_ident2 = params2
+#    print("theoretical values")
+#    print(f"delta = {delta:.6e}, alpha = {alpha:.6e}, beta = {beta:.6e}")
+#    print("identified values")
+#    print(f"delta = {delta_ident2:.6e}, alpha = {alpha_ident2:.6e}, beta = {beta_ident2:.6e}")
+##
+#
+#    ##### method 3 ####
+#    # Mean and std normalization
+#    x_mean, x_std = x_data.mean(), x_data.std()
+#    x_dot_mean, x_dot_std = x_dot_data.mean(), x_dot_data.std()#
+#    x_n = (x_data - x_mean) / x_std
+#    x_dot_n = (x_dot_data - x_dot_mean) / x_dot_std
+#    x_cubic_n = ((x_data**3) - (x_data**3).mean()) / (x_data**3).std()
+#    A = np.vstack([
+#        x_dot_n,
+#        x_n,
+#        x_cubic_n
+#    ]).T
+#    params3, _, _, _ = np.linalg.lstsq(A, rhs, rcond=None)
+#    # Back-transform the parameters
+#    #delta_ident3 = params3[0] / x_dot_std
+#    #alpha_ident3 = params3[1] / x_std
+#    #beta_ident3 = params3[2] / (x_data**3).std()
+#    delta_ident3, alpha_ident3, beta_ident3 = params3
+#    print("theoretical values")
+#    print(f"delta = {delta:.6e}, alpha = {alpha:.6e}, beta = {beta:.6e}")
+#    print("identified values")
+#    print(f"delta = {delta_ident3:.6e}, alpha = {alpha_ident3:.6e}, beta = {beta_ident3:.6e}")
 
 
-    ##### method 3 ####
-    # Mean and std normalization
-    x_mean, x_std = x_data.mean(), x_data.std()
-    x_dot_mean, x_dot_std = x_dot_data.mean(), x_dot_data.std()
-    x_n = (x_data - x_mean) / x_std
-    x_dot_n = (x_dot_data - x_dot_mean) / x_dot_std
-    x_cubic_n = ((x_data**3) - (x_data**3).mean()) / (x_data**3).std()
-    A = np.vstack([
-        x_dot_n,
-        x_n,
-        x_cubic_n
-    ]).T
-    params3, _, _, _ = np.linalg.lstsq(A, rhs, rcond=None)
-    # Back-transform the parameters
-    #delta_ident3 = params3[0] / x_dot_std
-    #alpha_ident3 = params3[1] / x_std
-    #beta_ident3 = params3[2] / (x_data**3).std()
-    delta_ident3, alpha_ident3, beta_ident3 = params3
-    print("theoretical values")
-    print(f"delta = {delta:.6e}, alpha = {alpha:.6e}, beta = {beta:.6e}")
-    print("identified values")
-    print(f"delta = {delta_ident3:.6e}, alpha = {alpha_ident3:.6e}, beta = {beta_ident3:.6e}")
+
 
 
 
@@ -1045,7 +1145,7 @@ for SNR_dB in SNR_dB_list:
     #neurons=2
     #neurons=100
     # Hyperparameters
-    #Nlearning_rate = 1e-4
+    #learning_rate = 1e-4
     #epochs_max = 20000
     #N_constraint = 1000
     
@@ -1182,7 +1282,7 @@ for SNR_dB in SNR_dB_list:
             #zero_input = torch.tensor([[0.0]], dtype=torch.float32).to(device)
             model2_at_zero = model2_nosym(zero_input)
             model1_at_zero = model1_nosym(zero_input)
-            restriction_loss = lambda_penalty * ((model2_at_zero ** 2).mean() + (model1_at_zero ** 2).mean())  # squared penalty
+            restriction_loss = lambda_penalty * ((model2_at_zero ** 2).mean() ) # + (model1_at_zero ** 2).mean())  # squared penalty
             #constraint_loss = lambda_penalty * (model2_at_zero ** 2).mean()  # squared penalty
             total_loss = loss + restriction_loss
         else:
@@ -1263,9 +1363,9 @@ for SNR_dB in SNR_dB_list:
     #neurons=2
     #neurons=100
     # Hyperparameters
-    learning_rate = 1e-4
-    epochs_max = 20000
-    N_constraint = 1000
+    #learning_rate = 1e-4
+    #epochs_max = 20000
+    #N_constraint = 1000
     
     # Convert data to tensors
     t_max =  np.max(t_simul)
@@ -1342,8 +1442,8 @@ for SNR_dB in SNR_dB_list:
     optimizer1 = optim.Adam(model1.parameters(), lr=learning_rate )
     optimizer2 = optim.Adam(model2.parameters(), lr=learning_rate )
 
-    #optimizer1 = optim.AdamW(model1.parameters(), lr=learning_rate , weight_decay=weight_decay)
-    #optimizer2 = optim.AdamW(model2.parameters(), lr=learning_rate , weight_decay=weight_decay)
+#    optimizer1 = optim.AdamW(model1.parameters(), lr=learning_rate , weight_decay=weight_decay)
+#    optimizer2 = optim.AdamW(model2.parameters(), lr=learning_rate , weight_decay=weight_decay)
     
     #optimizer1 = optim.SGD(model1.parameters(), lr=learning_rate , momentum=momentum) # working well with lr=1e-1
     #optimizer2 = optim.SGD(model2.parameters(), lr=learning_rate , momentum=momentum)
@@ -1400,7 +1500,7 @@ for SNR_dB in SNR_dB_list:
             #zero_input = torch.tensor([[0.0]], dtype=torch.float32).to(device)
             model2_at_zero = model2(zero_input)
             model1_at_zero = model1(zero_input)
-            restriction_loss = lambda_penalty * ((model2_at_zero ** 2).mean() + (model1_at_zero ** 2).mean())  # squared penalty
+            restriction_loss = lambda_penalty * ((model2_at_zero ** 2).mean()) # + (model1_at_zero ** 2).mean())  # squared penalty
             #constraint_loss = lambda_penalty * (model2_at_zero ** 2).mean()  # squared penalty
             total_loss = loss + restriction_loss
         else:
@@ -2330,6 +2430,10 @@ for SNR_dB in SNR_dB_list:
 
 
 
+
+
+
+
     ################################################################################
     ################################################################################
     ################################   VALIDATION   ################################
@@ -2344,7 +2448,7 @@ for SNR_dB in SNR_dB_list:
     printF('Integration of model EDOs')
 
 
-    n_trials = 1  # number of random initial conditions
+    n_trials = 10  # number of random initial conditions
     #rmse_x_NN_list = []
     #rmse_x_dot_NN_list = []
     #rmse_x_Sindy_list = []
@@ -2352,36 +2456,66 @@ for SNR_dB in SNR_dB_list:
     #rmse_x_LS_list = []
     #rmse_x_dot_LS_list = []
 
-    for i in range(n_trials):
 
+    rmse_x_SR_list = []
+    rmse_x_dot_SR_list = []
+    rmse_x_parametric_list = []
+    rmse_x_dot_parametric_list = []
+    rmse_x_NN_list = []
+    rmse_x_dot_NN_list = []
+    rmse_x_NN_retrain_list = []
+    rmse_x_dot_NN_retrain_list = []
+    rmse_x_NN_SR_list = []
+    rmse_x_dot_NN_SR_list = []
+    rmse_x_Sindy_list = []
+    rmse_x_dot_Sindy_list = []
+    rmse_x_LS_list = []
+    rmse_x_dot_LS_list = []
+    rmse_x_Sindy_k0_list = []
+    rmse_x_dot_Sindy_k0_list = []
+    rmse_x_SR_list = []
+    rmse_x_dot_SR_list = []
+    rmse_x_parametric_list = []
+    rmse_x_dot_parametric_list = []
+
+
+
+    for i in range(n_trials):
+        
+        #avoid consuming memmory with opened figures
+        plt.close()
+        
         # Random initial conditions uncomment
-        #x0_val = np.round(np.random.uniform(-0.5, 0.5),3)
-        #v0_val = np.round(np.random.uniform(-0.5, 0.5),3)
-        #y0_val = [x0_val, v0_val]
-        #A = np.round(np.random.uniform(1.0, 1.5),3)
-        #Omega = np.round(np.random.uniform(0.2, 0.4),3)
+        x0_val = np.round(np.random.uniform(-0.5, 0.5),3)
+        v0_val = np.round(np.random.uniform(-0.5, 0.5),3)
+        y0_val = [x0_val, v0_val]
+        F0 = np.round(np.random.uniform(1.0, 1.5),3)
+        Omega = np.round(np.random.uniform(0.2, 0.4),3)
         #x0_val=x0-0.05
         #v0_val=v0+0.01
-        
-        x0_val=-0.8 #x0
-        v0_val=0.7 #v0
-        y0_val = [x0_val,v0_val]
-        y0_val = y0
-        
-        
+
+        #x0_val=0.458 #x0
+        #v0_val=0.033 #v0
+        #y0_val = [x0_val,v0_val]
+        #F0=1.384
+        #Omega=0.578
+
+
+
+
         #kval = np.random.uniform(0.5, 1.)
         #cval = np.random.uniform(0.1, 0.5)
         #m = 1.0
         #mu_N = np.random.uniform(0.5, 1.0)
         #print(f"Trial {i+1} : x0={x0_val:.4f} ; v0={v0_val:.4f}")
-        #print(r"$\A$="+f"{A:.4f} ; "+r"$\Omega$"+f"={Omega:.4f}")
+        #print(r"$\A$="+f"{F0:.4f} ; "+r"$\Omega$"+f"={Omega:.4f}")
         print(f"Trial {i+1} :")
-        #print(f"alpha={alpha}, c={cval}")
+        print(f"mu_N={mu_N}, k={kval}, c={cval}")
         #print(f"$\Omega$={Omega}, $\mu$*N={mu_N}, $x_0$={x0}, $v_0$={v0}")
-        #print(f"Omega={Omega}, A={A}, $x_0$={x0_val:.4f}, $v_0$={v0_val:.4f}")
+        print(f"Omega={Omega}, F0={F0}, $x_0$={x0_val:.4f}, $v_0$={v0_val:.4f}")
         printF(f"Trial {i+1} :")
-        #printF(f"k={kval}, c={cval}")
-        #printF(f"Omega={Omega}, A={A}, $x_0$={x0_val:.4f}, $v_0$={v0_val:.4f}")
+        printF(f"mu_N={mu_N}, k={kval}, c={cval}")
+        printF(f"Omega={Omega}, F0={F0}, $x_0$={x0_val:.4f}, $v_0$={v0_val:.4f}")
 
 
         #kval = np.round(np.random.uniform(1, 1.5),3)
@@ -2411,10 +2545,10 @@ for SNR_dB in SNR_dB_list:
         #def F2(x):
         #    return kval*x
         #def F_ext(t):
-        #    return A*np.cos(Omega*t)
-        #def eq_2nd_ord_veloc(t,y):
+        #    return F0*np.cos(Omega*t)
+        #def S1_stick_slip(t,y):
         #    x, x_dot = y  # y=[x, x']
-        #    x_ddot = (F_ext(t) - F1(x_dot) - F2(x))
+        #    x_ddot = (F_ext(t) - F1(x_dot) - F2(x))/m
         #    return [x_dot, x_ddot]
         #
         #
@@ -2450,35 +2584,20 @@ for SNR_dB in SNR_dB_list:
         #    return c* x_dot + Ff_coul_anderson2009(x_dot,F_ext) #r(x_dot) Ff_coul Ff_dr
         #def F2_anderson2009(x):
         #    return kval*x/m
-        #def eq_2nd_ord_veloc_anderson2009(t,y):
+        #def S1_stick_slip_anderson2009(t,y):
         #    x, x_dot = y  # y=[x, x']
         #    fext_val = F_ext(t)
         ##    friction = Ff_coul_anderson2009(x_dot, fext_val)
         #    x_ddot = (fext_val - F1_anderson2009(x_dot,fext_val) - F2_anderson2009(x)) / m
         #    return [x_dot, x_ddot]
 
-
-
         ################ Theoretical Eq ###### validation of the model
         print("Integrating Th")
         printF("Integrating Th")
        
-        A=0.5
-        alpha=-1.0
-        beta=1.0
-        delta=0.3
-        Omega=1.2
-        x0=0.5
-        v0=-0.5
-        x0_val=x0
-        y0_val=y0
-        y0=[x0,v0]
-        y0_val=y0
-        
         start = time.time()  
-        sol_val = solve_ivp(eq_2nd_ord_veloc, t_span_val, y0_val, t_eval=t_val,method='LSODA')
-        
-        
+        sol_val = solve_ivp(S1_stick_slip, t_span_val, y0_val, t_eval=t_val,method='LSODA')
+    #    sol_val = solve_ivp(S1_stick_slip_anderson2009, t_span_val, y0_val, t_eval=t_val)
         end = time.time()  
         elapsed = end - start
         print(f"Solve_ivp finished in {elapsed:.3f} seconds")
@@ -2507,38 +2626,39 @@ for SNR_dB in SNR_dB_list:
 
 
 
-        ### SR is failing for stick-slip
+
+        ### SR is failing for
         ################ SR ###### validation of the model
         # Integrate
         #t_span = (0, 10)
         #t_val = np.linspace(t_span[0], t_span[1], 500)
         print("Integrating SR")
         printF("Integrating SR")
-        start = time.time()  
+        start = time.time()
         x_simulated_SR=[]
         x_dot_simulated_SR=[]
         try:
             sol_sr = solve_ivp(ode_sr, t_span_val, y0_val, t_eval=t_val , method='LSODA') #,rtol=1e-7,atol=1e-7) #,  method='DOP853', rtol=1e-9, atol=1e-12)
             t_SR = sol_sr.t
             x_simulated_SR = sol_sr.y[0]
-            x_dot_simulated_NN = sol_sr.y[1]
+            x_dot_simulated_SR = sol_sr.y[1]
             # check for NaNs or infs just in case
-            if np.any(np.isnan(x_simulated_NN)) or np.any(np.isinf(x_simulated_NN)):
+            if np.any(np.isnan(x_simulated_SR)) or np.any(np.isinf(x_simulated_SR)):
                 print(f"Skipping trial {i+1}: SR simulation returned NaNs or infs.")
                 printF(f"Skipping trial {i+1}: SR simulation returned NaNs or infs.")
         except Exception as e:
             print(f"Skipping trial {i+1}: Exception during SR simulation -> {e}")
             printF(f"Skipping trial {i+1}: Exception during SR simulation -> {e}")
-        end = time.time()  
+        end = time.time()
         elapsed = end - start
         print(f"Solve_ivp finished in {elapsed:.3f} seconds")
         printF(f"Solve_ivp finished in {elapsed:.3f} seconds")
-##        sol_sr = solve_ivp(ode_sr, t_span_val, [x0_val, v0_val], t_eval=t_val,method='LSODA')
-##        # Results
-##        t_SR = sol_sr.t
-##        x_simulated_SR = sol_sr.y[0]
-##        x_dot_simulated_SR = sol_sr.y[1]
-#
+#        sol_sr = solve_ivp(ode_sr, t_span_val, [x0_val, v0_val], t_eval=t_val,method='LSODA')
+#        # Results
+#        t_SR = sol_sr.t
+#        x_simulated_SR = sol_sr.y[0]
+#        x_dot_simulated_SR = sol_sr.y[1]
+
         plt.figure()
         plt.plot(t_SR, x_simulated_SR, label="SR")
         #plt.plot(time_data, x_data, label="true")
@@ -2551,26 +2671,34 @@ for SNR_dB in SNR_dB_list:
 
 
 
+
         ################ parametric ###### validation of the model
-        sol_parametric = solve_ivp(ode_param, t_span_val, [x0_val, v0_val], t_eval=t_val,method='LSODA')
-                        #rtol=1e-9, atol=1e-12, max_step=(t_eval[1] - t_eval[0]))   
+        print("Integrating Parametric")
+        printF("Integrating Parametric")
+        start = time.time()
+        sol_parametric = solve_ivp(ode_param, t_span_val, y0_val, t_eval=t_val,method='LSODA')
+        #sol_parametric = solve_ivp(ode_param, t_span_val, [x0_val, v0_val], t_eval=t_val,method='LSODA')
+                        #rtol=1e-9, atol=1e-12, max_step=(t_eval[1] - t_eval[0]))
+        end = time.time()
+        elapsed = end - start
+        print(f"Solve_ivp finished in {elapsed:.3f} seconds")
+        printF(f"Solve_ivp finished in {elapsed:.3f} seconds")
         t_parametric= sol_parametric.t
         x_simulated_parametric = sol_parametric.y[0]
         x_dot_simulated_parametric = sol_parametric.y[1]
-        
-        # Plot comparison
-        plt.figure(figsize=(8,5))
-        plt.plot(time_data, x_data, label="True x(t)", linewidth=2)
-        plt.plot(t_parametric, x_simulated_parametric, "--", label="Simulated x(t)", linewidth=2)
-        plt.xlabel("Time")
-        plt.ylabel("x(t)")
-        plt.legend()
-        plt.title("Parametric model simulation")
-        plt.show()
+
+#        # Plot comparison
+#        plt.figure(figsize=(8,5))
+#        plt.plot(time_data, x_data, label="True x(t)", linewidth=2)
+#        plt.plot(t_parametric, x_simulated_parametric, "--", label="Simulated x(t)", linewidth=2)
+#        plt.xlabel("Time")
+#        plt.ylabel("x(t)")
+#        plt.legend()
+#        plt.title("Parametric model simulation")
+#        plt.show()
 
 
-
-        ################ NN ###### 
+        ################ NN ###### validation of the model
         def learned_dynamics(t, y):
             x = torch.tensor([[y[0]]], dtype=torch.float32)
             x_dot = torch.tensor([[y[1]]], dtype=torch.float32)
@@ -2595,10 +2723,12 @@ for SNR_dB in SNR_dB_list:
         try:
             sol = solve_ivp(learned_dynamics, t_span_val, y0_val, t_eval=t_val , method='LSODA') #,rtol=1e-7,atol=1e-7) #,  method='DOP853', rtol=1e-9, atol=1e-12)
             x_simulated_NN = sol.y[0]
-            x_dot_simulated_NN = sol.y[1]            # check for NaNs or infs just in case
+            # check for NaNs or infs just in case
             if np.any(np.isnan(x_simulated_NN)) or np.any(np.isinf(x_simulated_NN)):
                 print(f"Skipping trial {i+1}: NN simulation returned NaNs or infs.")
                 printF(f"Skipping trial {i+1}: NN simulation returned NaNs or infs.")
+            x_simulated_NN = sol.y[0]
+            x_dot_simulated_NN = sol.y[1]
         except Exception as e:
             print(f"Skipping trial {i+1}: Exception during NN simulation -> {e}")
             printF(f"Skipping trial {i+1}: Exception during NN simulation -> {e}")
@@ -2613,7 +2743,7 @@ for SNR_dB in SNR_dB_list:
 
 
 
-        ################ NN retrain extrapolation ###### validation of the model
+        ################ NN ###### validation of the model
         def learned_dynamics(t, y):
             x = torch.tensor([[y[0]]], dtype=torch.float32)
             x_dot = torch.tensor([[y[1]]], dtype=torch.float32)
@@ -2639,11 +2769,12 @@ for SNR_dB in SNR_dB_list:
         try:
             sol = solve_ivp(learned_dynamics, t_span_val, y0_val, t_eval=t_val , method='LSODA') #,rtol=1e-7,atol=1e-7) #,  method='DOP853', rtol=1e-9, atol=1e-12)
             x_simulated_NN_retrain = sol.y[0]
-            x_dot_simulated_NN_retrain = sol.y[1]
             # check for NaNs or infs just in case
             if np.any(np.isnan(x_simulated_NN)) or np.any(np.isinf(x_simulated_NN)):
                 print(f"Skipping trial {i+1}: NN retrain simulation returned NaNs or infs.")
                 printF(f"Skipping trial {i+1}: NN retrain simulation returned NaNs or infs.")
+            x_simulated_NN_retrain = sol.y[0]
+            x_dot_simulated_NN_retrain = sol.y[1]
         except Exception as e:
             print(f"Skipping trial {i+1}: Exception during NN retrain simulation -> {e}")
             printF(f"Skipping trial {i+1}: Exception during NN retrain simulation -> {e}")
@@ -2654,33 +2785,6 @@ for SNR_dB in SNR_dB_list:
 
         #x_simulated_NN_retrain = sol.y[0]
         #x_dot_simulated_NN_retrain = sol.y[1]
-
-
-#        # working but improved below for computational speed
-#        ################ NN+SR ###### validation of the model
-#        # Define learned dynamics using PySR models
-#        def learned_dynamics_SR(t, y):
-#            x_val = y[0]
-#            x_dot_val = y[1]
-#            F_ext_val = F_ext(t)
-#            # f1(x_dot) and f2(x) using SR (PySR) models
-#            f1_val = model_f1SR.predict(np.array([[x_dot_val]]))[0]
-#            f2_val = model_f2SR.predict(np.array([[x_val]]))[0]
-#            # Newton's law: m x_ddot = F_ext - f1(x_dot) - f2(x)
-#            x_ddot = F_ext_val - f1_val - f2_val
-#            return [x_dot_val, x_ddot]
-#        # Now simulate
-#        sol = solve_ivp(
-#            learned_dynamics_SR,
-#            t_span_val,
-#            y0_val,
-#            t_eval=t_val,
-#            method='LSODA'  # or 'DOP853' depending on your stiffness needs
-#        )
-#        # Extract results
-#        x_simulated_NN_SR = sol.y[0]
-#        x_dot_simulated_NN_SR = sol.y[1]
-
 
 
         ################ NN+SR ###### validation of the model
@@ -2725,10 +2829,14 @@ for SNR_dB in SNR_dB_list:
         expr_f1 = model_f1SR.sympy()
         f1_lambda = sp.lambdify(sp.symbols("x0"), expr_f1, "numpy")
         
-        expr_f1_smooth = expr_f1.replace(sp.sign, lambda arg: sp.tanh(500*arg))
-        expr_f1_smooth = expr_f1_smooth.replace(sp.Abs, lambda arg: sp.sqrt(arg**2+1e-6))
+        #expr_f1_smooth = expr_f1
+        expr_f1_smooth = expr_f1.replace(sp.sign, lambda arg: sp.tanh(5000*arg))
+        #expr_f1_smooth = expr_f1_smooth.replace(sp.Abs, lambda arg: sp.sqrt(arg**2+1e-6))
+       
         print(model_f1SR.sympy())
+        printF(model_f1SR.sympy())
         print(expr_f1_smooth)
+        printF(expr_f1_smooth)
 
               
         f1_lambda = sp.lambdify(sp.symbols("x0"), expr_f1_smooth, "numpy")
@@ -2777,7 +2885,6 @@ for SNR_dB in SNR_dB_list:
         plt.ylabel("x(t)")
         plt.show()
 
-
         #############################################################        
         ################ SINDY ###### validation of the model
         #y0new=[0.8,0.0] # Condiciones iniciales: x(0) = 2, x'(0) = 0
@@ -2813,42 +2920,38 @@ for SNR_dB in SNR_dB_list:
 
 
         # continue
-        # Visualización de resultados
-        plt.figure(figsize=(12, 4))
-        plt.plot(t_simulated_th, x_simulated_th, label="Posición (datos reales)", lw=2)
-        plt.plot(t_val, x_val_sindy[:, 0], "--", label="Posición (predicción SINDy)", lw=2)
-        plt.xlabel("Tiempo")
-        plt.ylabel("Posición")
-        plt.legend()
-        plt.title("Comparación entre datos reales y predicción SINDy (sistema no lineal)")
-        plt.show()
+#        # Visualización de resultados
+#        plt.figure(figsize=(12, 4))
+#        plt.plot(t_span_ident, x_data, label="Posición (datos reales)", lw=2)
+#        plt.plot(t_val, x_val_sindy[:, 0], "--", label="Posición (predicción SINDy)", lw=2)
+#        plt.xlabel("Tiempo")
+#        plt.ylabel("Posición")
+#        plt.legend()
+#        plt.title("Comparación entre datos reales y predicción SINDy (sistema no lineal)")
+#        plt.show()
 
 
 
-
-
-        ################ SINDY without restrictions ###### validation of the model
-        print("Simulating Sindy without restrictions")
-        printF("Simulating Sindy without restrictions")
-        x_simulated_Sindy_ku0 = []
-        x_dot_simulated_Sindy_ku0 = []
-        start = time.time()
-        try:
-            u_val_sindy = F_ext(t_val)
-            x_val_sindy_ku0 = model_sindy_ku0.simulate(y0_val, t_val, u=u_val_sindy)
-            x_simulated_Sindy_ku0 = x_val_sindy_ku0[:, 0]
-            x_dot_simulated_Sindy_ku0 = x_val_sindy_ku0[:, 1]
-
-            # check for NaNs or infs just in case
-            if np.any(np.isnan(x_val_sindy_ku0)) or np.any(np.isinf(x_val_sindy_ku0)):
-                print(f"Skipping trial {i+1}: SINDy simulation returned NaNs or infs.")
-        except Exception as e:
-            print(f"Skipping trial {i+1}: Exception during SINDy simulation -> {e}")
-        end = time.time()  
-        elapsed = end - start
-        print(f"Solve_ivp finished in {elapsed:.3f} seconds")
-        printF(f"Solve_ivp finished in {elapsed:.3f} seconds")
-                     
+#
+#        ################ SINDY without restrictions ###### validation of the model
+#        print("Simulating Sindy without restrictions")
+#        x_simulated_Sindy_ku0 = np.zeros(len(t_val))
+#        x_dot_simulated_Sindy_ku0 = np.zeros(len(t_val))
+#        print("Integrating Sindy-ku0")
+#        printF("Integrating Sindy-ku0")
+#        try:
+#            u_val_sindy = F_ext(t_val)
+#            x_val_sindy_ku0 = model_sindy_ku0.simulate(y0_val, t_val, u=u_val_sindy)
+#            # check for NaNs or infs just in case
+#            if np.any(np.isnan(x_val_sindy_ku0)) or np.any(np.isinf(x_val_sindy_ku0)):
+#                print(f"Skipping trial {i+1}: SINDy simulation returned NaNs or infs.")
+#                printF(f"Skipping trial {i+1}: SINDy simulation returned NaNs or infs.")
+#            x_simulated_Sindy_ku0 = x_val_sindy_ku0[:, 0]
+#            x_dot_simulated_Sindy_ku0 = x_val_sindy_ku0[:, 1]
+#        except Exception as e:
+#            print(f"Skipping trial {i+1}: Exception during SINDy simulation -> {e}")
+#            printF(f"Skipping trial {i+1}: Exception during SINDy simulation -> {e}")
+#
 
 
         ################ LS ###### validation of the model
@@ -2938,12 +3041,41 @@ for SNR_dB in SNR_dB_list:
 #            printF(f"Skipping trial {i+1}: Exception during LS simulation -> {e}")
 #            #continue
 
+
+        # estimation if some integration failed
+        if len(x_simulated_NN) != len(t_val):
+            print("Warning:")
+            print("NN-CC finished integration before maximum simulation time")
+            print("time:",t_val[len(x_simulated_NN)-1])
+        if len(x_simulated_LS) != len(t_val):
+            print("Warning:")
+            print("LS-CC finished integration before maximum simulation time")
+            print("time:",t_val[len(x_simulated_LS)-1])
+        if len(x_simulated_Sindy) != len(t_val):
+            print("Warning:")
+            print("Sindy-CC finished integration before maximum simulation time")
+            print("time:",t_val[len(x_simulated_Sindy)-1])
+        if len(x_simulated_NN_retrain) != len(t_val):
+            print("Warning:")
+            print("NN-CC retrained finished integration before maximum simulation time")
+            print("time:",t_val[len(x_simulated_NN_retrain)-1])
+        if len(x_simulated_NN_SR) != len(t_val):
+            print("Warning:")
+            print("NN-CC-SR finished integration before maximum simulation time")
+            print("time:",t_val[len(x_simulated_NN_SR)-1])
+        #if len(x_simulated_SR) != len(t_val):
+        #    print("SR finished integration before maximum simulation time")
+        #    print("time:",t_val[len(x_simulated_SR)-1])
+
+
 #        # Plot the simulation results
 #        plt.figure(figsize=(15, 5))
 #        plt.subplot(1, 2, 1)
 #        plt.plot(t_val, x_simulated_th,'-',color='blue', label="$x_{th}$",linewidth='2')
 #        plt.plot(t_val, x_simulated_NN,"--",color='orange', label="$x_{val} NN$",linewidth='3')
 #        plt.plot(t_val[0:len(x_simulated_LS)], x_simulated_LS,"--",color='red', label="$x_{val} LS$",linewidth='3')
+#        plt.plot(t_val[0:len(x_simulated_Sindy)], x_simulated_Sindy,"--",color='violet', label="$x_{val} Sindy-CC$",linewidth='3')
+#        
 #        if(bool_print_sindy):
 #            plt.plot(t_val[0:len(x_simulated_Sindy)], x_simulated_Sindy,"--",color='darkgreen', label="$x_{val} Sindy$",linewidth='3')
 #        plt.ylim(np.min(x_simulated_th)-0.2,np.max(x_simulated_th)+0.2)
@@ -2967,172 +3099,97 @@ for SNR_dB in SNR_dB_list:
 #        plt.legend()
 #        plt.grid(True)
 #        plt.show()
-
-
-        # CHECK if some integration failed
-        if len(x_simulated_NN) != len(t_val):
-            print("Warning:")
-            print("NN-CC finished integration before maximum simulation time")
-            print("time:",t_val[len(x_simulated_NN)-1])
-            printF("Warning:")
-            printF("NN-CC finished integration before maximum simulation time")
-            printF("time:",t_val[len(x_simulated_NN)-1])
-        if len(x_simulated_LS) != len(t_val):
-            print("Warning:")
-            print("LS-CC finished integration before maximum simulation time")
-            print("time:",t_val[len(x_simulated_LS)-1])
-            printF("Warning:")
-            printF("LS-CC finished integration before maximum simulation time")
-            printF("time:",t_val[len(x_simulated_LS)-1])
-        if len(x_simulated_Sindy) != len(t_val):
-            print("Warning:")
-            print("Sindy-CC finished integration before maximum simulation time")
-            print("time:",t_val[len(x_simulated_Sindy)-1])
-            printF("Warning:")
-            printF("Sindy-CC finished integration before maximum simulation time")
-            printF("time:",t_val[len(x_simulated_Sindy)-1])
-        if len(x_simulated_NN_retrain) != len(t_val):
-            print("Warning:")
-            print("NN-CC retrained finished integration before maximum simulation time")
-            print("time:",t_val[len(x_simulated_NN_retrain)-1])
-            printF("Warning:")
-            printF("NN-CC retrained finished integration before maximum simulation time")
-            printF("time:",t_val[len(x_simulated_NN_retrain)-1])
-        if len(x_simulated_NN_SR) != len(t_val):
-            print("Warning:")
-            print("NN-CC-SR finished integration before maximum simulation time")
-            print("time:",t_val[len(x_simulated_NN_SR)-1])
-            printF("Warning:")
-            printF("NN-CC-SR finished integration before maximum simulation time")
-            printF("time:",t_val[len(x_simulated_NN_SR)-1])
-        if len(x_simulated_SR) != len(t_val):
-            print("Warning:")
-            print("SR finished integration before maximum simulation time")
-            print("time:",t_val[len(x_simulated_SR)-1])
-            printF("Warning:")
-            printF("SR finished integration before maximum simulation time")
-            printF("time:",t_val[len(x_simulated_SR)-1])
-
-
-        # Plot the simulation results
-        plt.figure(figsize=(15, 5))
-        plt.subplot(1, 2, 1)
-        plt.plot(t_val, x_simulated_th,'-',color='blue', label="$x_{th}$",linewidth='2')
-        plt.plot(t_val, x_simulated_NN,"--",color='orange', label="$x_{val} NN$",linewidth='3')
-        plt.plot(t_val[0:len(x_simulated_LS)], x_simulated_LS,"--",color='red', label="$x_{val} LS$",linewidth='3')
-        plt.plot(t_val[0:len(x_simulated_Sindy)], x_simulated_Sindy,"--",color='violet', label="$x_{val} Sindy-CC$",linewidth='3')
-        
-        if(bool_print_sindy):
-            plt.plot(t_val[0:len(x_simulated_Sindy)], x_simulated_Sindy,"--",color='darkgreen', label="$x_{val} Sindy$",linewidth='3')
-        plt.ylim(np.min(x_simulated_th)-0.2,np.max(x_simulated_th)+0.2)
-        plt.xlabel("Time $t$")
-        plt.ylabel("Position")
-        plt.title("Validation Test of Position over Time")
-        plt.legend()
-        plt.grid(True)
-        plt.subplot(1, 2, 2)
-        plt.plot(t_val, x_dot_simulated_th,color='blue', label="$\\dot{x}_{th}$")
-        plt.plot(t_val, x_dot_simulated_NN,"--",color='orange', label="$\\dot{x}_{val} NN$", linestyle="dashed",linewidth='3')
-        plt.plot(t_val[0:len(x_dot_simulated_LS)], x_dot_simulated_LS,"--",color='red', label="$\\dot{x}_{val} LS$", linestyle="dashed",linewidth='3')
-        if(bool_print_sindy):
-            plt.plot(t_val[0:len(x_dot_simulated_Sindy)], x_dot_simulated_Sindy,"--",color='darkgreen', label="$\\dot{x}_{val} Sindy$",linewidth='3')
-#        plt.plot(t_val[0:-1], x_val_sindy[:,1],"--",color='darkgreen', label="$\\dot{x}_{val} Sindy$",linewidth='3')
-        plt.ylim(np.min(x_dot_simulated_th)-0.2,np.max(x_dot_simulated_th)+0.2)
-        #plt.ylim(-0.75,0.75)
-        plt.xlabel("Time $t$")
-        plt.ylabel("Velocity")
-        plt.title("Neural Network Simulation of Velocity over Time")
-        plt.legend()
-        plt.grid(True)
-        plt.show()
-
-
-
-        def custom_ticks(ax, major_x_interval, major_y_interval, minor_x_interval, minor_y_interval):
-            # Set major ticks
-            ax.xaxis.set_major_locator(ticker.MultipleLocator(major_x_interval))
-            ax.yaxis.set_major_locator(ticker.MultipleLocator(major_y_interval))
-            # Set minor ticks
-            ax.xaxis.set_minor_locator(ticker.MultipleLocator(minor_x_interval))
-            ax.yaxis.set_minor_locator(ticker.MultipleLocator(minor_y_interval))
-            # Customize tick appearance
-        #    ax.tick_params(axis='both', direction='in', which='major', length=8, width=1.5, labelsize=24)
-        #    ax.tick_params(axis='both', direction='in', which='minor', length=5, width=1)
-            ax.tick_params(axis='x', direction='in', which='major', length=8, width=1.5, labelsize=24, top=True, bottom=True)
-            ax.tick_params(axis='y', direction='in', which='major', length=8, width=1.5, labelsize=24, left=True, right=True)
-            ax.tick_params(axis='x', direction='in', which='minor', length=5, width=1, top=True,bottom=True)
-            ax.tick_params(axis='y', direction='in', which='minor', length=5, width=1, left=True, right=True)
-
-
-
-        fig, axs = plt.subplots(2, 2, figsize=(12, 8), sharex=False)
-
-        # ---- (a) x(t) values ----
-        axs[0, 0].plot(t_val, x_simulated_th, '-', color='blue', label="Theor.", linewidth=3)
-        axs[0, 0].plot(t_val, x_simulated_NN, "--", color='orange', label="NN-CC", linewidth=3)
-        axs[0, 0].plot(t_val, x_simulated_NN_retrain, "--", color='violet', label="NN-CC retrained", linewidth=3)
-        axs[0, 0].plot(t_val, x_simulated_NN_SR, "--", color='magenta', label="NN-CC-SR", linewidth=3)
-        axs[0, 0].plot(t_val[:len(x_simulated_LS)], x_simulated_LS, "--", color='red', label="Poly-CC", linewidth=3)
-        axs[0, 0].plot(t_val[:-1], x_simulated_Sindy, "--", color='darkgreen', label="SINDy-CC", linewidth=3)
-        axs[0, 0].set_ylim(np.min(x_simulated_LS)-0.2, np.max(x_simulated_LS)+0.2)
-        axs[0, 0].set_ylabel("$x$", fontsize=24)
-        axs[0, 0].legend(fontsize=14, loc='upper left', bbox_to_anchor=(0, 1))
-        custom_ticks(axs[0, 0], 20, 0.5 , 5 , 0.25)
-        axs[0, 0].text(0.98, 0.04, "(a)", transform=axs[0, 0].transAxes, fontsize=24, va='bottom', ha='right')
-
-        # ---- (b) x_dot(t) values ----
-        axs[0, 1].plot(t_val, x_dot_simulated_th, '-', color='blue', label="Theor.", linewidth=3)
-        axs[0, 1].plot(t_val, x_dot_simulated_NN, "--", color='orange', label="NN-CC", linewidth=3)
-        axs[0, 1].plot(t_val, x_dot_simulated_NN_retrain, "--", color='violet', label="NN-CC retrained", linewidth=3)
-        axs[0, 1].plot(t_val, x_dot_simulated_NN_SR, "--", color='magenta', label="NN-CC-SR", linewidth=3)
-        axs[0, 1].plot(t_val[:len(x_dot_simulated_LS)], x_dot_simulated_LS, "--", color='red', label="Poly-CC", linewidth=3)
-        axs[0, 1].plot(t_val[:-1], x_dot_simulated_Sindy, "--", color='darkgreen', label="SINDy-CC", linewidth=3)
-        axs[0, 1].set_ylim(np.min(x_dot_simulated_LS)-0.2, np.max(x_dot_simulated_LS)+0.2)
-        axs[0, 1].set_ylabel("$\dot{x}$", fontsize=24)
-        axs[0, 1].legend(fontsize=14, loc='upper left', bbox_to_anchor=(0, 1))
-        custom_ticks(axs[0, 1], 20, 0.5, 5, 0.25)
-        axs[0, 1].text(0.98, 0.04, "(b)", transform=axs[0, 1].transAxes, fontsize=24, va='bottom', ha='right')
-
-        # ---- (c) Residuals: x_model - x_theor ----
-        axs[1, 0].plot(t_val, x_simulated_NN - x_simulated_th, '--', color='orange', label="NN-CC", linewidth=3)
-        axs[1, 0].plot(t_val[:len(x_simulated_LS)], x_simulated_LS - x_simulated_th[:len(x_simulated_LS)], '--', color='red', label="Poly-CC", linewidth=3)
-        axs[1, 0].plot(t_val[:-1], x_simulated_Sindy - x_simulated_th[:-1], '--', color='darkgreen', label="SINDy-CC", linewidth=3)
-        axs[1, 0].axhline(0, color='black', linewidth=1)
-        axs[1, 0].set_ylabel("$x-x_{th.}$", fontsize=22)
-        axs[1, 0].set_xlabel("$t$", fontsize=24)
-        axs[1, 0].legend(fontsize=14, loc='upper left', bbox_to_anchor=(0, 1))
-        custom_ticks(axs[1, 0], 20, 0.2, 5, 0.1)
-        axs[1, 0].text(0.9, 0.04, "(c)", transform=axs[1, 0].transAxes, fontsize=24, va='bottom', ha='right')
-
-        # ---- (d) Residuals: x_dot_model - x_dot_theor ----
-        axs[1, 1].plot(t_val, x_dot_simulated_NN - x_dot_simulated_th, '--', color='orange', label="NN-CC", linewidth=3)
-        axs[1, 1].plot(t_val[:len(x_dot_simulated_LS)], x_dot_simulated_LS - x_dot_simulated_th[:len(x_dot_simulated_LS)], '--', color='red', label="Poly-CC", linewidth=3)
-        axs[1, 1].plot(t_val[:-1], x_dot_simulated_Sindy - x_dot_simulated_th[:-1], '--', color='darkgreen', label="SINDy-CC", linewidth=3)
-        axs[1, 1].axhline(0, color='black', linewidth=1)
-        axs[1, 1].set_ylabel("$\dot{x}-\dot{x}_{th.}$", fontsize=22)
-        axs[1, 1].set_xlabel("$t$", fontsize=24)
-        axs[1, 1].legend(fontsize=14, loc='upper left', bbox_to_anchor=(0, 1))
-        custom_ticks(axs[1, 1], 20, 0.1, 5, 0.05)
-        axs[1, 1].text(0.9, 0.04, "(d)", transform=axs[1, 1].transAxes, fontsize=24, va='bottom', ha='right')
-
-        plt.tight_layout()
-
-        # Save
-        folder_path = output_path
-        # "/content/drive/My Drive/Colab Notebooks/Plots"
-        os.makedirs(folder_path, exist_ok=True)
-        file_name = "valid_duffing.pdf"
-        file_path = os.path.join(folder_path, file_name)
-        plt.savefig(file_path, format='pdf', bbox_inches='tight')
-#       plt.show()
-        print(f"Saved to: {file_path}")
-
-
+#
+#
+#
+#
+#        def custom_ticks(ax, major_x_interval, major_y_interval, minor_x_interval, minor_y_interval):
+#            # Set major ticks
+#            ax.xaxis.set_major_locator(ticker.MultipleLocator(major_x_interval))
+#            ax.yaxis.set_major_locator(ticker.MultipleLocator(major_y_interval))
+#            # Set minor ticks
+#            ax.xaxis.set_minor_locator(ticker.MultipleLocator(minor_x_interval))
+#            ax.yaxis.set_minor_locator(ticker.MultipleLocator(minor_y_interval))
+#            # Customize tick appearance
+#        #    ax.tick_params(axis='both', direction='in', which='major', length=8, width=1.5, labelsize=24)
+#        #    ax.tick_params(axis='both', direction='in', which='minor', length=5, width=1)
+#            ax.tick_params(axis='x', direction='in', which='major', length=8, width=1.5, labelsize=24, top=True, bottom=True)
+#            ax.tick_params(axis='y', direction='in', which='major', length=8, width=1.5, labelsize=24, left=True, right=True)
+#            ax.tick_params(axis='x', direction='in', which='minor', length=5, width=1, top=True,bottom=True)
+#            ax.tick_params(axis='y', direction='in', which='minor', length=5, width=1, left=True, right=True)
+#
+#
+#
+#        fig, axs = plt.subplots(2, 2, figsize=(12, 8), sharex=False)
+#
+#        # ---- (a) x(t) values ----
+#        axs[0, 0].plot(t_val[:len(x_simulated_th)], x_simulated_th, '-', color='blue', label="Theor.", linewidth=3)
+#        axs[0, 0].plot(t_val[:len(x_simulated_NN)], x_simulated_NN, "--", color='orange', label="NN-CC", linewidth=3)
+#        axs[0, 0].plot(t_val[:len(x_simulated_NN_retrain)], x_simulated_NN_retrain, "--", color='violet', label="NN-CC retrained", linewidth=3)
+#        axs[0, 0].plot(t_val[:len(x_simulated_NN_SR)], x_simulated_NN_SR, "--", color='magenta', label="NN-CC-SR", linewidth=3)
+#        axs[0, 0].plot(t_val[:len(x_simulated_LS)], x_simulated_LS, "--", color='red', label="Poly-CC", linewidth=3)
+#        axs[0, 0].plot(t_val[:len(x_simulated_Sindy)], x_simulated_Sindy, "--", color='darkgreen', label="SINDy-CC", linewidth=3)
+#        #axs[0, 0].set_ylim(np.min(x_simulated_LS)-0.2, np.max(x_simulated_LS)+0.2)
+#        axs[0, 0].set_ylabel("$x$", fontsize=24)
+#        axs[0, 0].legend(fontsize=14, loc='upper left', bbox_to_anchor=(0, 1))
+#        custom_ticks(axs[0, 0], 20, 0.5 , 5 , 0.25)
+#        axs[0, 0].text(0.98, 0.04, "(a)", transform=axs[0, 0].transAxes, fontsize=24, va='bottom', ha='right')
+#
+#        # ---- (b) x_dot(t) values ----
+#        axs[0, 1].plot(t_val, x_dot_simulated_th, '-', color='blue', label="Theor.", linewidth=3)
+#        axs[0, 1].plot(t_val[:len(x_dot_simulated_NN)], x_dot_simulated_NN, "--", color='orange', label="NN-CC", linewidth=3)
+#        axs[0, 1].plot(t_val[:len(x_dot_simulated_NN_retrain)], x_dot_simulated_NN_retrain, "--", color='violet', label="NN-CC retrained", linewidth=3)
+#        axs[0, 1].plot(t_val[:len(x_dot_simulated_NN_SR)], x_dot_simulated_NN_SR, "--", color='magenta', label="NN-CC-SR", linewidth=3)
+#        axs[0, 1].plot(t_val[:len(x_dot_simulated_LS)], x_dot_simulated_LS, "--", color='red', label="Poly-CC", linewidth=3)
+#        axs[0, 1].plot(t_val[:len(x_dot_simulated_Sindy)], x_dot_simulated_Sindy, "--", color='darkgreen', label="SINDy-CC", linewidth=3)
+#        #axs[0, 1].set_ylim(np.min(x_dot_simulated_LS)-0.2, np.max(x_dot_simulated_LS)+0.2)
+#        axs[0, 1].set_ylabel("$\dot{x}$", fontsize=24)
+#        axs[0, 1].legend(fontsize=14, loc='upper left', bbox_to_anchor=(0, 1))
+#        custom_ticks(axs[0, 1], 20, 0.5, 5, 0.25)
+#        axs[0, 1].text(0.98, 0.04, "(b)", transform=axs[0, 1].transAxes, fontsize=24, va='bottom', ha='right')
+#
+#        # ---- (c) Residuals: x_model - x_theor ----
+#        axs[1, 0].plot(t_val[:len(x_simulated_LS)], x_simulated_LS - x_simulated_th[:len(x_simulated_LS)], '--', color='red', label="Poly-CC", linewidth=3)
+#        axs[1, 0].plot(t_val[:len(x_simulated_Sindy)], x_simulated_Sindy - x_simulated_th[:-1], '--', color='darkgreen', label="SINDy-CC", linewidth=3)
+#        axs[1, 0].plot(t_val[:len(x_simulated_NN)], x_simulated_NN - x_simulated_th, '--', color='orange', label="NN-CC", linewidth=3)
+#        axs[1, 0].plot(t_val[:len(x_simulated_NN_retrain)], x_simulated_NN_retrain - x_simulated_th, '--', color='violet', label="NN-CC retrained", linewidth=3)
+#        axs[1, 0].plot(t_val[:len(x_simulated_NN_SR)], x_simulated_NN_SR - x_simulated_th, '--', color='magenta', label="NN-CC-SR", linewidth=3)
+#        axs[1, 0].axhline(0, color='black', linewidth=1)
+#        axs[1, 0].set_ylabel("$x-x_{th.}$", fontsize=22)
+#        axs[1, 0].set_xlabel("$t$", fontsize=24)
+#        axs[1, 0].legend(fontsize=14, loc='upper left', bbox_to_anchor=(0, 1))
+#        custom_ticks(axs[1, 0], 20, 0.2, 5, 0.1)
+#        axs[1, 0].text(0.9, 0.04, "(c)", transform=axs[1, 0].transAxes, fontsize=24, va='bottom', ha='right')
+#
+#        # ---- (d) Residuals: x_dot_model - x_dot_theor ----
+#        axs[1, 1].plot(t_val[:len(x_dot_simulated_LS)], x_dot_simulated_LS - x_dot_simulated_th[:len(x_dot_simulated_LS)], '--', color='red', label="Poly-CC", linewidth=3)
+#        axs[1, 1].plot(t_val[:len(x_dot_simulated_Sindy)], x_dot_simulated_Sindy - x_dot_simulated_th[:-1], '--', color='darkgreen', label="SINDy-CC", linewidth=3)
+#        axs[1, 1].plot(t_val[:len(x_dot_simulated_NN)], x_dot_simulated_NN - x_dot_simulated_th, '--', color='orange', label="NN-CC", linewidth=3)
+#        axs[1, 1].plot(t_val[:len(x_dot_simulated_NN_retrain)], x_dot_simulated_NN_retrain - x_dot_simulated_th, '--', color='violet', label="NN-CC retrained", linewidth=3)
+#        axs[1, 1].plot(t_val[:len(x_dot_simulated_NN_SR)], x_dot_simulated_NN_SR - x_dot_simulated_th, '--', color='magenta', label="NN-CC-SR", linewidth=3)
+#        axs[1, 1].axhline(0, color='black', linewidth=1)
+#        axs[1, 1].set_ylabel("$\dot{x}-\dot{x}_{th.}$", fontsize=22)
+#        axs[1, 1].set_xlabel("$t$", fontsize=24)
+#        axs[1, 1].legend(fontsize=14, loc='upper left', bbox_to_anchor=(0, 1))
+#        custom_ticks(axs[1, 1], 20, 0.1, 5, 0.05)
+#        axs[1, 1].text(0.9, 0.04, "(d)", transform=axs[1, 1].transAxes, fontsize=24, va='bottom', ha='right')
+#
+#        plt.tight_layout()
+#
+#        # Save
+#        folder_path = output_path
+#        # "/content/drive/My Drive/Colab Notebooks/Plots"
+#        os.makedirs(folder_path, exist_ok=True)
+#        file_name = "valid_duffing.pdf"
+#        file_path = os.path.join(folder_path, file_name)
+#        plt.savefig(file_path, format='pdf', bbox_inches='tight')
+#        plt.show()
+#        print(f"Saved to: {file_path}")
+#
 
 
         # Calculation of absolute value separation
         threshold_chaos = 0.2 # 4
-
 #        time_chaos_x_SR_list.append(t_val[-1])
         time_chaos_x_SR=t_val[len(x_simulated_SR)-1]
         for i in range(len(x_simulated_SR)):
@@ -3143,7 +3200,6 @@ for SNR_dB in SNR_dB_list:
                 break
         time_chaos_x_SR_list.append(time_chaos_x_SR)
 #        time_chaos_x_parametric_list.append(t_val[-1])
-
         time_chaos_x_parametric=t_val[-1]
         for i in range(len(x_simulated_parametric)):
             diff = abs(x_simulated_parametric[i] - x_simulated_th[i])
@@ -3153,7 +3209,6 @@ for SNR_dB in SNR_dB_list:
                 break
         time_chaos_x_parametric_list.append(time_chaos_x_parametric)
         #time_chaos_x_NN_list.append(t_val[-1])
-
         time_chaos_x_NN=t_val[len(x_simulated_NN)-1]
         for i in range(len(x_simulated_NN)):
             diff = abs(x_simulated_NN[i] - x_simulated_th[i])
@@ -3163,7 +3218,6 @@ for SNR_dB in SNR_dB_list:
                 break
         time_chaos_x_NN_list.append(time_chaos_x_NN)
         #time_chaos_x_NN_retrain_list.append(t_val[-1])
-
         time_chaos_x_NN_retrain=t_val[len(x_simulated_NN_retrain)-1]
         for i in range(len(x_simulated_NN_retrain)-1):
             diff = abs(x_simulated_NN_retrain[i] - x_simulated_th[i])
@@ -3173,7 +3227,6 @@ for SNR_dB in SNR_dB_list:
                 break
         time_chaos_x_NN_retrain_list.append(time_chaos_x_NN_retrain)
         #time_chaos_x_NN_SR_list.append(t_val[-1])
-
         time_chaos_x_NN_SR=t_val[len(x_simulated_NN_SR)-1]
         for i in range(len(x_simulated_NN_SR)):
             diff = abs(x_simulated_NN_SR[i] - x_simulated_th[i])
@@ -3183,7 +3236,6 @@ for SNR_dB in SNR_dB_list:
                 break
         time_chaos_x_NN_SR_list.append(time_chaos_x_NN_SR)
         #time_chaos_x_LS_list.append(t_val[-1])
-
         time_chaos_x_LS=t_val[len(x_simulated_LS)-1]
         for i in range(len(x_simulated_LS)):
             diff = abs(x_simulated_LS[i] - x_simulated_th[i])
@@ -3193,7 +3245,6 @@ for SNR_dB in SNR_dB_list:
                 break
         time_chaos_x_LS_list.append(time_chaos_x_LS)
         #time_chaos_x_Sindy_list.append(t_val[-1])
-
         time_chaos_x_Sindy=t_val[len(x_simulated_Sindy)-1]
         for i in range(len(x_simulated_Sindy)):
             diff = abs(x_simulated_Sindy[i] - x_simulated_th[i])
@@ -3202,16 +3253,15 @@ for SNR_dB in SNR_dB_list:
                 time_chaos_x_Sindy=t_val[i]
                 break
         time_chaos_x_Sindy_list.append(time_chaos_x_Sindy)
-        #time_chaos_x_Sindy_ku0_list.append(t_val[-1])
-        
-        time_chaos_x_Sindy_ku0=t_val[-1]
-        for i in range(len(x_simulated_Sindy_ku0)):
-            diff = abs(x_simulated_Sindy_ku0[i] - x_simulated_th[i])
-            if diff > threshold_chaos:
-                #time_chaos_x_Sindy_ku0_list.append(t_val[i])
-                time_chaos_x_Sindy_ku0=t_val[i]
-                break
-        time_chaos_x_Sindy_ku0_list.append(time_chaos_x_Sindy_ku0)
+#        #time_chaos_x_Sindy_ku0_list.append(t_val[-1])
+#        time_chaos_x_Sindy_ku0=t_val[-1]
+#        for i in range(len(x_simulated_Sindy_ku0)):
+#            diff = abs(x_simulated_Sindy_ku0[i] - x_simulated_th[i])
+#            if diff > threshold_chaos:
+#                #time_chaos_x_Sindy_ku0_list.append(t_val[i])
+#                time_chaos_x_Sindy_ku0=t_val[i]
+#                break
+#        time_chaos_x_Sindy_ku0_list.append(time_chaos_x_Sindy_ku0)
 
         time_matrix_append = np.column_stack([
             noise_percentage_th,
@@ -3222,27 +3272,28 @@ for SNR_dB in SNR_dB_list:
             time_chaos_x_LS,
             time_chaos_x_NN_retrain,
             time_chaos_x_NN_SR,
-            time_chaos_x_Sindy_ku0,
+            #time_chaos_x_Sindy_ku0,
             time_chaos_x_SR,
             time_chaos_x_parametric
         ])
         folder_path = output_path
         os.makedirs(folder_path, exist_ok=True)
-        file_name = "times_noise_chaos_duffing_SR_and_param.txt"
+        file_name = "times_noise_chaos_duffing_NN_without_symmetry.txt"
         file_path = os.path.join(folder_path, file_name)
         # Save with header and space as delimiter
         file_exists = os.path.isfile(file_path)
         with open(file_path, 'a') as f:
             np.savetxt(f, time_matrix_append,
-                       #header="nois_th nois nois_db  NN  Sindy  LS NN_ret NN_SR Sindy_ku0 SR Param" if not file_exists else '',
-                       header="nois_th nois nois_db  NN  Sindy LS NN_retrain NN_SR  Sindy_ku0  SR  Parametric" if not file_exists else '',
-                       #header="# noise_th noise noise_db t_SR t_parametric" if not file_exists else '',
+                       #header="noise_th noise noise_db  NN  Sindy LS NN_retrain NN_SR  Sindy_ku0  SR Parametric" if not file_exists else '',
+                       header="noise_th noise noise_db  NN  Sindy LS NN_retrain NN_SR  SR Parametric" if not file_exists else '',
                        fmt="%.2f", delimiter=" ", comments='')
 
 
 
         # Calculation of RMSE values
         #  print(f"Trial {i+1} : x0={x0_val:.4f} ; v0={v0_val:.4f}")
+
+
         print("RMSE values:")
         printF("RMSE values:")
         rmse_x_NN = np.sqrt(np.mean((x_simulated_th[0:len(x_simulated_NN)] - x_simulated_NN) ** 2))
@@ -3298,6 +3349,26 @@ for SNR_dB in SNR_dB_list:
         rmse_x_LS_list.append(rmse_x_LS)
         rmse_x_dot_LS_list.append(rmse_x_dot_LS)
 
+
+        rmse_x_SR = np.sqrt(np.mean((x_simulated_th[0:len(x_simulated_SR)] - x_simulated_SR) ** 2))
+        rmse_x_dot_SR = np.sqrt(np.mean((x_dot_simulated_th[0:len(x_dot_simulated_SR)] - x_dot_simulated_SR) ** 2))
+        print(f"SR results   \t - x: {rmse_x_SR:.6f}, x': {rmse_x_dot_SR:.6f}")
+        printF(f"SR results   \t - x: {rmse_x_SR:.6f}, x': {rmse_x_dot_SR:.6f}")
+        #print(f"RMSE for Position (x): {rmse_x_LS:.6f}")
+        #print(f"RMSE for Velocity (x'): {rmse_x_dot_LS:.6f}")
+        rmse_x_SR_list.append(rmse_x_SR)
+        rmse_x_dot_SR_list.append(rmse_x_dot_SR)
+
+
+        rmse_x_parametric = np.sqrt(np.mean((x_simulated_th[0:len(x_simulated_parametric)] - x_simulated_parametric) ** 2))
+        rmse_x_dot_parametric = np.sqrt(np.mean((x_dot_simulated_th[0:len(x_dot_simulated_parametric)] - x_dot_simulated_parametric) ** 2))
+        print(f"Param results   \t - x: {rmse_x_parametric:.6f}, x': {rmse_x_dot_parametric:.6f}")
+        printF(f"Param results   \t - x: {rmse_x_parametric:.6f}, x': {rmse_x_dot_parametric:.6f}")
+        #print(f"RMSE for Position (x): {rmse_x_LS:.6f}")
+        #print(f"RMSE for Velocity (x'): {rmse_x_dot_LS:.6f}")
+        rmse_x_parametric_list.append(rmse_x_parametric)        
+        rmse_x_dot_parametric_list.append(rmse_x_dot_parametric)
+        
         rmse_matrix_append = np.column_stack([
             noise_percentage_th,
             noise_percentage,
@@ -3311,7 +3382,11 @@ for SNR_dB in SNR_dB_list:
             rmse_x_NN_retrain,
             rmse_x_dot_NN_retrain,
             rmse_x_NN_SR,
-            rmse_x_dot_NN_SR
+            rmse_x_dot_NN_SR,
+            rmse_x_SR,
+            rmse_x_dot_SR,
+            rmse_x_parametric,
+            rmse_x_dot_parametric
         ])
         folder_path = output_path
         os.makedirs(folder_path, exist_ok=True)
@@ -3321,8 +3396,9 @@ for SNR_dB in SNR_dB_list:
         file_exists = os.path.isfile(file_path)
         with open(file_path, 'a') as f:
             np.savetxt(f, rmse_matrix_append,
-                       header="noise_th noise noise_db rmse_x_NN rmse_x_dot_NN rmse_x_Sindy rmse_x_dot_Sindy rmse_x_LS rmse_x_dot_LS rmse_x_NN_retrain rmse_x_dot_NN_retrain rmse_x_NN_SR rmse_x_dot_NN_SR" if not file_exists else '',
-                       fmt="%.8f", delimiter=" ", comments='')
+                       #header="noise_th noise noise_db rmse_x_NN rmse_x_dot_NN rmse_x_Sindy rmse_x_dot_Sindy rmse_x_LS rmse_x_dot_LS rmse_x_NN_retrain rmse_x_dot_NN_retrain rmse_x_NN_SR rmse_x_dot_NN_SR" if not file_exists else '',
+                       header="n_th n n_db x_NN xd_NN x_Sindy xd_Sindy x_LS xd_LS x_NN_ret xd_NN_ret x_NN_SR xd_NN_SR x_SR xd_SR x_param xd_param" if not file_exists else '',
+                       fmt="%.3e", delimiter=" ", comments='')
 
 
     # Compute overall RMSE and standard deviation
@@ -3346,6 +3422,15 @@ for SNR_dB in SNR_dB_list:
     std_rmse_x_NN_SR = np.std(rmse_x_NN_SR_list)
     total_rmse_x_dot_NN_SR = np.mean(rmse_x_dot_NN_SR_list)
     std_rmse_x_dot_NN_SR = np.std(rmse_x_dot_NN_SR_list)
+    total_rmse_x_SR = np.mean(rmse_x_SR_list)
+    std_rmse_x_SR = np.std(rmse_x_SR_list)
+    total_rmse_x_dot_SR = np.mean(rmse_x_dot_SR_list)
+    std_rmse_x_dot_SR = np.std(rmse_x_dot_SR_list)
+    total_rmse_x_parametric = np.mean(rmse_x_parametric_list)
+    std_rmse_x_parametric = np.std(rmse_x_parametric_list)
+    total_rmse_x_dot_parametric = np.mean(rmse_x_dot_parametric_list)
+    std_rmse_x_dot_parametric = np.std(rmse_x_dot_parametric_list)
+    
 
     # Print results
     print("\n======= Total RMSE over all trials (mean ± std, % std) =======")
@@ -3378,11 +3463,50 @@ for SNR_dB in SNR_dB_list:
     printF(f"Position (x):     {total_rmse_x_NN_retrain:.6f} ± {std_rmse_x_NN_retrain:.6f}  ({std_rmse_x_NN_retrain/total_rmse_x_NN_retrain*100:.6f}%)")
     printF(f"Velocity (x'):    {total_rmse_x_dot_NN_retrain:.6f} ± {std_rmse_x_dot_NN_retrain:.6f}  ({std_rmse_x_dot_NN_retrain/total_rmse_x_dot_NN_retrain*100:.6f}%)")
     printF("NN-SR results")
-    printF(f"Position (x):     {total_rmse_x_NN_SR:.6f} ± {std_rmse_x_NN_SR:.6f}  ({std_rmse_x_NN_retrain/total_rmse_x_NN_SR*100:.6f}%)")
-    printF(f"Velocity (x'):    {total_rmse_x_dot_NN_SR:.6f} ± {std_rmse_x_dot_NN_SR:.6f}  ({std_rmse_x_dot_NN_retrain/total_rmse_x_dot_NN_SR*100:.6f}%)")
+    printF(f"Position (x):     {total_rmse_x_NN_SR:.6f} ± {std_rmse_x_NN_SR:.6f}  ({std_rmse_x_NN_SR/total_rmse_x_NN_SR*100:.6f}%)")
+    printF(f"Velocity (x'):    {total_rmse_x_dot_NN_SR:.6f} ± {std_rmse_x_dot_NN_SR:.6f}  ({std_rmse_x_dot_NN_SR/total_rmse_x_dot_NN_SR*100:.6f}%)")
 
 
-    # These lists must already be defined
+    printF("SR results")
+    printF(f"Position (x):     {total_rmse_x_SR:.6f} ± {std_rmse_x_SR:.6f}  ({std_rmse_x_SR/total_rmse_x_NN_SR*100:.6f}%)")
+    printF(f"Velocity (x'):    {total_rmse_x_dot_SR:.6f} ± {std_rmse_x_dot_SR:.6f}  ({std_rmse_x_dot_SR/total_rmse_x_dot_SR*100:.6f}%)")
+
+
+    printF("param results")
+    printF(f"Position (x):     {total_rmse_x_parametric:.6f} ± {std_rmse_x_parametric:.6f}  ({std_rmse_x_parametric/total_rmse_x_parametric*100:.6f}%)")
+    printF(f"Velocity (x'):    {total_rmse_x_dot_parametric:.6f} ± {std_rmse_x_dot_parametric:.6f}  ({std_rmse_x_dot_parametric/total_rmse_x_dot_parametric*100:.6f}%)")
+    rmse_mat = np.column_stack([
+        noise_percentage_th,
+        noise_percentage,
+        SNR_dB,
+        total_rmse_x_NN,
+        total_rmse_x_dot_NN,
+        total_rmse_x_Sindy,
+        total_rmse_x_dot_Sindy,
+        total_rmse_x_LS,
+        total_rmse_x_dot_LS,
+        total_rmse_x_NN_retrain,
+        total_rmse_x_dot_NN_retrain,
+        total_rmse_x_NN_SR,
+        total_rmse_x_dot_NN_SR,
+        total_rmse_x_SR,
+        total_rmse_x_dot_SR,
+        total_rmse_x_parametric,
+        total_rmse_x_dot_parametric,
+    ])
+    folder_path = output_path
+    os.makedirs(folder_path, exist_ok=True)
+    file_name = "rmse_noise_total_mean_value_comparison.txt"
+    file_path = os.path.join(folder_path, file_name)
+    # Save with header and space as delimiter
+    file_exists = os.path.isfile(file_path)
+    with open(file_path, 'a') as f:
+        np.savetxt(f, rmse_mat,
+                   #header="noise_th noise noise_db  NN  Sindy LS NN_retrain NN_SR  Sindy_ku0  SR Parametric" if not file_exists else '',
+                   #header="noise_th noise noise_db  NN12  Sindy12 LS12 NN_retrain12 NN_SR12" if not file_exists else '',
+                   header="noise_th noise noise_db  NN12  Sindy12 LS12 NN_retrain12 NN_SR12 SR12 Parametric12" if not file_exists else '',
+                   fmt="%.3e", delimiter=" ", comments='')
+   # These lists must already be defined
     # Each one should contain RMSE values over multiple trials
     # e.g., rmse_x_NN_list = [rmse_trial1, rmse_trial2, ..., rmse_trialN]
     # same for other methods
@@ -3390,11 +3514,11 @@ for SNR_dB in SNR_dB_list:
         rmse_x_NN_list,
         rmse_x_Sindy_list,
         rmse_x_LS_list,
+        rmse_x_NN_SR_list,
         rmse_x_NN_retrain_list,
-        rmse_x_NN_SR_list
     ]
-    labels = ['NN-CC', 'SINDy', 'Poly-CC', 'NN-CC retrain','NN-CC-SR']
-    plt.figure(figsize=(6, 6))
+    labels = ['NN-CC', 'SINDy', 'Poly-CC','NN-CC-SR', 'NN-CC retrain'] #
+    plt.figure(figsize=(9, 6))
     bp = plt.boxplot(
         rmse_data, labels=labels, patch_artist=True,
         boxprops=dict(facecolor='skyblue', color='black', linewidth=1.5),
@@ -3423,11 +3547,11 @@ for SNR_dB in SNR_dB_list:
         rmse_x_dot_NN_list,
         rmse_x_dot_Sindy_list,
         rmse_x_dot_LS_list,
+        rmse_x_dot_NN_SR_list,
         rmse_x_dot_NN_retrain_list,
-        rmse_x_dot_NN_SR_list
     ]
-    labels = ['NN-CC', 'SINDy', 'Poly-CC','NN-CC retrain','NN-CC-SR']
-    plt.figure(figsize=(6, 6))
+    labels = ['NN-CC', 'SINDy-CC', 'Poly-CC','NN-CC-SR','NN-CC-extrap'] # retrain','NN-CC-SR']
+    plt.figure(figsize=(9, 6))
     bp = plt.boxplot(
         rmse_dot_data, labels=labels, patch_artist=True,
         boxprops=dict(facecolor='skyblue', color='black', linewidth=1.5),
@@ -3482,6 +3606,5 @@ for SNR_dB in SNR_dB_list:
 
 
 #test_predictions = model(test_inputs).cpu().numpy()  # Move predictions to CPU for plotting
-
 
 

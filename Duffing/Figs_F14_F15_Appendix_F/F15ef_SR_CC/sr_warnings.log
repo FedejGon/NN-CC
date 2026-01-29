@@ -1,0 +1,5 @@
+WARNING: Crossed terms found in Symbolic Regression.
+SNR Value: N/A
+Full Equation: x*(-(-0.118723094)*xdot*xdot + (x*x - 1.0456555)*0.95599717) + xdot*0.30360612
+Mixed Terms: [0.118723094*x*xdot**2]
+----------------------------------------

@@ -1,0 +1,2280 @@
+##!pip install pysindy
+# Van der Pol RN with Fext
+# Importar bibliotecas necesarias
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import numpy as np
+#import pysindy as ps
+import matplotlib.pyplot as plt
+import matplotlib.ticker as ticker
+from scipy.integrate import solve_ivp
+import pysindy as ps
+print(ps.__version__)
+from pysindy.feature_library import PolynomialLibrary
+from pysindy.feature_library import CustomLibrary
+from pysindy.feature_library import ParameterizedLibrary
+from pysindy.feature_library import IdentityLibrary
+from pysindy.optimizers import ConstrainedSR3
+from pysindy import AxesArray
+from pysindy.optimizers import STLSQ
+from pysindy import SINDy
+from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import PolynomialFeatures
+from numpy.polynomial.legendre import legvander
+from scipy.signal import savgol_filter
+from scipy.special import comb  # For binomial coefficients
+import os
+import copy
+import time
+#from google.colab import drive
+#drive.mount('/content/drive')
+#output_path = "/content/drive/My Drive/Colab Notebooks/Second_order_noise/Python"
+#output_path = "/content/drive/Shared with me/Federico2024_System_Identification/Python"
+output_path = "./"
+output_file_log = open("output_log.txt", "w")
+
+from pysr import PySRRegressor
+import sympy as sp
+#SR_crossed_terms=False
+# Check for GPU availability
+if torch.cuda.is_available():
+    print("GPU is available, using GPU")
+else:
+    print("GPU is not available, using CPU.")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+# Free GPU memory if using CUDA
+if torch.cuda.is_available():
+    torch.cuda.empty_cache()
+    torch.cuda.ipc_collect()
+# Initialization of random number generators for reproducibility
+np.random.seed(10) 
+torch.manual_seed(15)  # any integer
+
+time_chaos_x_SR_list=[]
+time_chaos_x_parametric_list=[]
+time_chaos_x_NN_list =[]
+time_chaos_x_NN_nosym_list =[]
+time_chaos_x_NN_SR_list =[]
+time_chaos_x_NN_SR_nosym_list =[]
+time_chaos_x_Sindy_list =[]
+time_chaos_x_LS_list =[]
+time_chaos_x_Sindy_ku0_list=[]
+
+rmse_x_SR_list = []
+rmse_x_dot_SR_list = []
+rmse_x_parametric_list = []
+rmse_x_dot_parametric_list = []
+rmse_x_NN_list = []
+rmse_x_dot_NN_list = []
+rmse_x_NN_nosym_list = []
+rmse_x_dot_NN_nosym_list = []
+rmse_x_NN_nosym_SR_list = []
+rmse_x_dot_NN_nosym_SR_list = []
+rmse_x_NN_SR_list = []
+rmse_x_dot_NN_SR_list = []
+rmse_x_Sindy_list = []
+rmse_x_dot_Sindy_list = []
+rmse_x_LS_list = []
+rmse_x_dot_LS_list = []
+rmse_x_Sindy_k0_list = []
+rmse_x_dot_Sindy_k0_list = []    
+print("ODE: x'' + f1(x') + f2(x) = F_ext(t)")
+print("Duffing System")
+print("f1(x')= delta x'")
+print("f2(x)= alpha x + beta x^3")
+print("F_ext(t)=Aext cos(Omega t)")
+
+#parameters stick slip
+#m=1.0 # kg
+#cval=0.1 # Ns/m (viscous damping coefficient)
+#kval=1.0 # N/m (stiffness)
+#Aext=2 # N (forcing amplitude)
+#Omega=0.3 # 0.3 and 0.15 rad/s (forcing frequency)
+#x0=0.1 # m (initial displacement)
+#v0=0.1 # m/s (initial velocity)
+#mu_N = 0.5 #0.5
+#m=1.0
+
+#parameters duffing
+#Aext=0.5
+#alpha=-1.0
+#beta=1.0
+#delta=0.3
+#Omega=1.2
+#x0=0.5
+#v0=-0.5
+#y0 = [x0, v0]  # [x(0), x'(0)]
+
+Tsimul=40 # for generating the training database
+Nsimul=1000
+Tval=1*Tsimul # for forward simulations with trained models
+Nval=1*Nsimul
+NevalCC=1000 # number of evaluating points for the CCs from min to max values
+t_span = (0, Tsimul)  # time interval for training dataset
+t_simul = np.linspace(*t_span, Nsimul)  
+t_span_val = (0, Tval)  # time interval for forward simulation
+t_val = np.linspace(*t_span_val, Nval)   
+
+# parameters for evaluating CCs for extrapolation
+n_window = 50 # number of points to calculate the envelope around each edge
+range_interp = 0.2 # percentage of values near edges for obtaining the envelope
+range_extrap = 0.5  # percentage of extrapolated range with respect to total range
+n_extra = 50 # number of new data points for each direction
+deg_extrap = 1 # degree of polynomial extrapolation
+
+# Hyperparameters for NN-CC methods
+learning_rate = 1e-4
+epochs_max = 20000
+neurons=100
+error_threshold = 1e-8
+f1_symmetry='odd'
+f2_symmetry='odd'
+lambda_penalty = 1e-4  # You can adjust this weight if needed
+lambda_penalty_symm = 1e1
+apply_restriction=False #True
+N_constraint = 1000 # number of points for evaluating symmetry constraints
+#for testing other activation functions
+#weight_decay = 1e-6 # 0.0 # 1e-6 was the better, 0.0 default
+#momentum=0.99
+
+
+SNR_dB_list = [np.inf] + list(np.linspace(40, -20, 61 ))  # ∞, 20, 17.5, ..., -5
+#SNR_dB_list = list(np.linspace(40, -20, 61 ))  # ∞, 20, 17.5, ..., -5
+#SNR_dB_list = list(np.linspace(20, -20, 41 ))  # ∞, 20, 17.5, ..., -5
+
+#SNR_dB_list = [np.inf] + list(np.linspace(40, 5, 36 ))  # ∞, 20, 17.5, ..., -5
+#SNR_dB_list = list(np.linspace(-18, -20, 3 ))  # ∞, 20, 17.5, ..., -5
+
+#SNR_dB_list = list(np.linspace(5, -20, 26 ))  # ∞, 20, 17.5, ..., -5
+
+SNR_dB_list = [20.0]
+
+#repeat 3 times each value in the list
+#SNR_dB_list = np.repeat(SNR_dB_list, 10)
+
+
+#SNR_dB_list = np.repeat(SNR_dB_list,B_list = list(np.linspace(5, -5, 3))  # ∞, 20, 17.5, ..., -5
+
+
+for SNR_dB in SNR_dB_list:
+    Aext=0.5
+    alpha=-1.05
+    beta=1.02
+    delta=0.3
+    Omega=1.2
+    x0=0.5
+    v0=-0.5
+    y0 = [x0, v0]  # [x(0), x'(0)]
+    
+    print(f"SNR_dB={SNR_dB}")    
+    print(f"alpha={alpha}, beta={beta}, delta={delta}")
+    print(f"Omega={Omega}, Aext={Aext}, x₀={x0}, v₀={v0}")
+    
+    #Definition of the theoretical functions
+    def F1(x_dot):
+        return delta * x_dot 
+    def F2(x):
+        return alpha*x+beta*x**3 
+    def F_ext(t):
+        return Aext*np.cos(Omega*t)
+    def eq_2nd_ord_veloc(t,y):
+        x, x_dot = y  # y=[x, x']
+        x_ddot = (F_ext(t) - F1(x_dot) - F2(x))*1.0
+        return [x_dot, x_ddot]
+
+    # ODE: x'' + F1(x_dot) + F2(x) = F_ext(t) 
+    # ODE: x'' + delta x_dot + alpha x + beta x^3 = F_ext(t) 
+    # F_ext(t) = Aext cos(Omega t)
+
+    #Integrate forward the theoretical equation to generate training dataset 
+    sol = solve_ivp(eq_2nd_ord_veloc, t_span, y0, t_eval=t_simul,method='LSODA') 
+    # other integration methods:
+    #, method='BDF', rtol=1e-6, atol=1e-8, dense_output=True)
+    #, method='DOP853', rtol=1e-9, atol=1e-12)
+    #, method='Radau', rtol=1e-6, atol=1e-8
+    #verify that integration was succesful
+    print(sol.status)   # 0 = success, 1 = reached event, -1 = failed
+    print(sol.message)
+
+    # extract variables 
+    x_data = sol.y[0]      
+    x_dot_data = sol.y[1]  
+    time_data = sol.t       
+    x_ddot_data = np.array([eq_2nd_ord_veloc(t, y)[1] for t, y in zip(sol.t, sol.y.T)])
+    F1_th=F1(x_dot_data)
+    F2_th=F2(x_data)
+    # linear range of data to plot identified CCs 
+    x_vals = np.linspace(np.min(x_data), np.max(x_data), NevalCC)
+    xdot_vals = np.linspace(np.min(x_dot_data), np.max(x_dot_data), NevalCC)
+
+    
+    # plot theoretical integrations
+    plt.figure()
+    plt.title("Theoretical ODE integration: Consistency Check")
+    plt.plot(time_data, (x_ddot_data + F1_th + F2_th - F_ext(time_data))**2)
+    plt.xlabel("t")
+    plt.ylabel(r"MSE $(\ddot{x} + F_1(\dot{x}) + F_2(x) - F_{ext})^2$")#$(\ddot{x} - \ddot{x}_{model})^2$")
+    plt.grid(True, alpha=0.3)
+    plt.show()
+    #plt.plot(time_data, x_data)
+    #plt.xlabel("Time")
+    #plt.ylabel("x(t)")
+    #plt.title("Theoretical data")
+    #plt.grid(True)
+    #plt.show()
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 5), sharex=True)
+    ax1.plot(time_data, x_data, color='black')
+    ax1.set_ylabel("x(t)")
+    ax1.set_title("Theoretical Data (without noise)")
+    ax1.grid(True)
+    ax2.plot(time_data, F_ext(time_data), color='black', linestyle='-')
+    ax2.set_xlabel("t")
+    ax2.set_ylabel(r"F$_{ext}(t)$")
+    ax2.grid(True)
+    plt.tight_layout()
+    plt.show()    
+    
+
+    # Add noise to F_ext with a given SNR (in dB)
+    if np.isinf(SNR_dB):
+        print("Running with SNR = ∞ dB (no noise)")
+        #print("noise=",noise)
+        F_ext_noise_data = F_ext(time_data) 
+        noise_percentage=0.0
+        noise_percentage_th=0.0
+    else:
+        print(f"Running with SNR = {SNR_dB:.2f} dB")
+        # Add noise based on a predefined SNR_dB
+        Fext_signal_power = np.mean(F_ext(time_data)**2)
+        noise_power = Fext_signal_power / (10**(SNR_dB / 10))
+        noise_std = np.sqrt(noise_power)
+        #add noise  
+        F_ext_val_noisy = F_ext(time_data) + np.random.normal(0, noise_std, size=time_data.shape)
+        #compute measured noise
+        Fext_noise_substraction = F_ext_val_noisy - F_ext(time_data)
+        signal_power = np.mean(F_ext(time_data)**2)
+        noise_power = np.mean(Fext_noise_substraction**2)
+        snr_measured = 10 * np.log10(signal_power / noise_power)
+        # Compute noise percentage relative to RMS signal
+        signal_rms = np.sqrt(signal_power)
+        noise_rms= np.sqrt(noise_power)
+        noise_percentage_th=100*10**(-SNR_dB / 20.0)
+        noise_percentage = 100 * (noise_rms / signal_rms)
+        print(f"Desired SNR in Fext: {SNR_dB} dB")
+        print(f"Measured SNR in Fext: {snr_measured:.2f} dB")
+        print(f"Desired noise percentage in Fext: {noise_percentage_th:.2f}%")
+        print(f"Measured noise percentage in Fext: {noise_percentage:.2f}%")
+        
+        
+        # --- now apply a Savitzky–Golay filter (not used, only for testing) ---
+        # choose an odd window length and a small polynomial order
+        window_length = 51    # must be odd, e.g. 5, 11, 51, …
+        polyorder     = 3     # < window_length
+        F_ext_filtered = savgol_filter(
+            F_ext_val_noisy,
+            window_length=window_length,
+            polyorder=polyorder,
+            mode='interp'       # avoids edge artifacts
+        )
+        # measure the SNR *after* filtering (optional)
+        noise_after = F_ext_filtered - F_ext(time_data)
+        snr_after   = 10 * np.log10(
+            np.mean(F_ext(time_data)**2) / np.mean(noise_after**2)
+        )
+        print(f"SNR after SG filter: {snr_after:.1f} dB")
+        plt.figure(figsize=(6, 4))
+        plt.plot(time_data, F_ext(time_data),         label='Fext (true)')
+        plt.plot(time_data, F_ext_val_noisy,          label='Fext + noise', alpha=0.7)
+        plt.plot(time_data, F_ext_filtered,           label='SG-filtered', linewidth=2)
+        plt.xlabel('Time')
+        plt.ylabel(r'F$_{ext}$(t)')
+        plt.title('Original vs Noisy vs SG-Filtered Forcing')
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
+        # Here we can select different options for the noisy Fext 
+        #F_ext_noise_data = F_ext(time_data) 
+        #F_ext_noise_data = F_ext_filtered
+        F_ext_noise_data = F_ext_val_noisy
+
+    
+    # plot Training dataset
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(8, 5), sharex=True)
+    ax1.plot(time_data, x_data, color='black')
+    ax1.set_ylabel("x(t)")
+    ax1.set_title("Theoretical Data (with noise) : Training dataset")
+    ax1.grid(True)
+    ax2.plot(time_data, F_ext_noise_data, color='black', linestyle='-')
+    ax2.set_xlabel("t")
+    ax2.set_ylabel(r"F$_{ext}$(t)")
+    ax2.grid(True)
+    plt.tight_layout()
+    plt.show()   
+    # plot 
+    plt.figure()
+    plt.title(r"MSE of F$_{ext}$ with and without noise")
+    plt.plot(time_data, (F_ext(time_data) - F_ext_noise_data )**2) 
+    plt.xlabel("t")
+    plt.ylabel(r"Squared Error (F$_{ext}^{noiseless}$ - F$_{ext}^{noise}$)$^2$")
+    plt.grid(True, alpha=0.3)
+    plt.show()
+    
+    # range of training data values
+    print("min(x) , max(x)=", np.min(x_data),",",np.max(x_data))
+    print(f"min(ẋ) , max(ẋ)= {np.min(x_dot_data)} , {np.max(x_dot_data)}")
+
+    ############################################
+    ########### IDENTIFICATION #################
+    ############################################
+
+
+
+
+    ####################################################
+    ############# Parametric-CC  #################   least squares
+    # Right-hand side
+    rhs = F_ext_noise_data -  x_ddot_data 
+    # Design matrix: [x_dot, x, x^3]
+    A = np.vstack([
+        x_dot_data,
+        x_data,
+        x_data**3
+    ]).T  # shape: (N, 3)
+    # Solve least squares: A x [delta, alpha, beta] = rhs
+    start = time.time()
+    params, _, _, _ = np.linalg.lstsq(A, rhs, rcond=None)
+    delta_ident_param, alpha_ident_param, beta_ident_param = params
+    print("Parametric-CC model")
+    end = time.time()  
+    elapsed = end - start
+    print(f"Training finished in {elapsed:.3f} seconds")
+    print("Theoretical params:")
+    print(f"delta = {delta:.6e}, alpha = {alpha:.6e}, beta = {beta:.6e}")
+    print(" ")
+    print("Identified params from Parametric-CC:")
+    print(f"delta = {delta_ident_param:.6e}, alpha = {alpha_ident_param:.6e}, beta = {beta_ident_param:.6e}")
+
+    #defining the Parametric-CC functions for forward simulations
+    def ode_param(t, state):
+        x, xdot = state
+        xddot = (F_ext(t) - delta_ident_param*xdot - alpha_ident_param*x - beta_ident_param*x**3) # / m
+        return [xdot, xddot]
+    def f1_param(x_dot):
+        return delta_ident_param * x_dot
+    def f2_param(x):
+        return alpha_ident_param * x + beta_ident_param * x**3
+    
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(5, 8))
+    ax1.plot(xdot_vals, f1_param(xdot_vals), label="Identified", linewidth=2)
+    ax1.plot(xdot_vals, F1(xdot_vals), '--',color='black', label="Theor.", linewidth=2)
+    ax1.set_title("Obtained CCs from Parametric-CC method")
+    ax1.set_xlabel(r"$\dot{x}$")
+    ax1.set_ylabel(r"f$_1(\dot{x})$")
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+    ax2.plot(x_vals, f2_param(x_vals), label="Identified", linewidth=2)
+    ax2.plot(x_vals, F2(x_vals), '--',color='black', label="Theor.", linewidth=3)
+    ax2.set_ylabel(r"f$_2$(x)")
+    ax2.set_xlabel("x")
+    ax2.legend()
+    ax2.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+    # Integrate forward the obtained Parametric-CC model for verification
+    # (using the same ICs and driven force as the training data)
+    sol = solve_ivp(ode_param, t_span, y0, t_eval=t_simul,method='LSODA') 
+    x_sim = sol.y[0]
+    xdot_sim = sol.y[1]
+    plt.figure(figsize=(8,5))
+    plt.plot(time_data[0:len(x_sim)], x_sim, label="Parametric-CC", linewidth=2)
+    plt.plot(time_data, x_data, "--", color='black', label="Training data", linewidth=2)
+    plt.xlabel("t")
+    plt.ylabel("x(t)")
+    plt.legend()
+    plt.title("Simulation with Parametric-CC model")
+    plt.show()
+
+
+    
+        
+    ##############################################
+    #############  NN-CC WITHOUT SYMMETRIES  ######### this next part is for training NNS
+    # Redefining Hyperparameters (for testing proposes only)
+    #for neurons in [150,20,50,100,200]:
+    #Nlearning_rate = 1e-4
+    #epochs_max = 20000
+    #N_constraint = 1000
+    
+    # Convert data to tensors
+    t_max =  np.max(t_simul)
+    t_tensor = torch.tensor(t_simul, dtype=torch.float32).unsqueeze(1).to(device)
+    x_tensor = torch.tensor(x_data, dtype=torch.float32).unsqueeze(1).to(device)
+    x_dot_tensor = torch.tensor(x_dot_data, dtype=torch.float32).unsqueeze(1).to(device)
+    x_ddot_tensor = torch.tensor(x_ddot_data, dtype=torch.float32).unsqueeze(1).to(device)
+    F_ext_tensor = torch.tensor(F_ext_noise_data, dtype=torch.float32).unsqueeze(1).to(device)
+    # define tensors from linear space to then evaluate CCs
+    x_vals_tensor = torch.tensor(x_vals, dtype=torch.float32).unsqueeze(1).to('cpu')
+    xdot_vals_tensor = torch.tensor(xdot_vals, dtype=torch.float32).unsqueeze(1).to('cpu')
+
+    #x_dot_constraint = torch.linspace(min(x_dot_data), max(x_dot_data), N_constraint).unsqueeze(1).to(device)
+    #x_constraint     = torch.linspace(min(x_data),  max(x_data),     N_constraint).unsqueeze(1).to(device)
+
+    # Define the Neural Network architectures
+    class NN1(nn.Module):
+        def __init__(self):
+            super(NN1, self).__init__()
+            self.fc1 = nn.Linear(1, neurons)
+            self.fc2 = nn.Linear(neurons, neurons)
+            self.fc3 = nn.Linear(neurons, neurons)
+            self.fc4 = nn.Linear(neurons, 1)
+        #    self.fc5 = nn.Linear(neurons, 1)
+        def forward(self, x):
+            #x = torch.relu(self.fc1(x))
+            #x = torch.relu(self.fc2(x))
+            #x = torch.nn.functional.leaky_relu(self.fc1(x),0.01)
+            #x = torch.nn.functional.leaky_relu(self.fc2(x),0.01)
+            #x = torch.nn.functional.leaky_relu(self.fc3(x),0.01)
+            x = torch.relu(self.fc1(x))
+            x = torch.relu(self.fc2(x))
+            x = torch.relu(self.fc3(x))
+            #x = torch.relu(self.fc3(x))
+            #x = torch.relu(self.fc4(x))
+            return self.fc4(x)
+    # relu tanh sigmoid(good) rrelu nn.functional.softplus
+    # rrelu nn.functional.silu rrelu nn.functional.selu
+    # rrelu nn.functional.gelu
+    class NN2(nn.Module):
+        def __init__(self):
+            super(NN2, self).__init__()
+            self.fc1 = nn.Linear(1, neurons)
+            self.fc2 = nn.Linear(neurons, neurons)
+            self.fc3 = nn.Linear(neurons, neurons)
+            self.fc4 = nn.Linear(neurons, 1)
+            #self.fc4 = nn.Linear(neurons, neurons)
+            #self.fc5 = nn.Linear(neurons, 1)
+        def forward(self, x):
+            #x = torch.nn.functional.leaky_relu(self.fc1(x),0.01)
+            #x = torch.nn.functional.leaky_relu(self.fc2(x),0.01)
+            #x = torch.nn.functional.leaky_relu(self.fc3(x),0.01)
+            x = torch.relu(self.fc1(x))
+            x = torch.relu(self.fc2(x))
+            x = torch.relu(self.fc3(x))
+            #x = torch.relu(self.fc3(x))
+            #x = torch.relu(self.fc4(x))
+            return self.fc4(x)
+
+    # Instantiate the model
+    model1_nosym = NN1().to(device)
+    model2_nosym = NN2().to(device)
+    criterion = nn.MSELoss()
+    optimizer1 = optim.Adam(model1_nosym.parameters(), lr=learning_rate ) 
+    # , weight_decay=weight_decay) # working well with lr=1e-4
+    optimizer2 = optim.Adam(model2_nosym.parameters(), lr=learning_rate ) 
+    #other optimizers (for testing purposes)
+    #optimizer1 = optim.AdamW(model1_nosym.parameters(), lr=learning_rate , weight_decay=weight_decay)
+    #optimizer2 = optim.AdamW(model2_nosym.parameters(), lr=learning_rate , weight_decay=weight_decay)    
+    #optimizer1 = optim.SGD(model1_nosym.parameters(), lr=learning_rate , momentum=momentum) # working well with lr=1e-1
+    #optimizer2 = optim.SGD(model2_nosym.parameters(), lr=learning_rate , momentum=momentum)
+    
+    # Training loop
+    zero_input = torch.tensor([[0.0]], dtype=torch.float32).to(device)
+    time_start=time.time()
+    for epoch in range(epochs_max):
+        model1_nosym.train()
+        model2_nosym.train()
+        predictions = x_ddot_tensor + model1_nosym(x_dot_tensor) + model2_nosym(x_tensor)
+        loss = criterion(predictions, F_ext_tensor)
+        # Add constraint: model2(0.0) ≈ 0
+        restriction_loss=0.0*model2_nosym(zero_input)
+        if(apply_restriction):
+            model2_at_zero = model2_nosym(zero_input)
+            model1_at_zero = model1_nosym(zero_input)
+            restriction_loss = lambda_penalty * ((model2_at_zero ** 2).mean() + (model1_at_zero ** 2).mean())  # squared penalty
+            #constraint_loss = lambda_penalty * (model2_at_zero ** 2).mean()  # squared penalty
+            total_loss = loss + restriction_loss
+        else:
+            total_loss = loss      
+        constraint_loss = restriction_loss
+        # Backward pass and optimization
+        optimizer1.zero_grad()
+        optimizer2.zero_grad()
+        total_loss.backward()
+        optimizer1.step()
+        optimizer2.step()
+        # Print the loss
+        if epoch == 0 or (epoch + 1) % 100 == 0:
+            print(f"Epoch [{epoch+1}], Loss: {loss.item():.4e}, Constraints: {constraint_loss.item():.4e}")
+        if total_loss.item() < error_threshold:
+            print(f"Training stopped at epoch {epoch}, Total Loss: {total_loss.item()}")
+            break
+    time_end=time.time()
+    print(" ")
+    print("End training baseline NN-CC")
+    print("Neurons :",neurons)
+    print(f"Training time: {time_end-time_start} seconds")
+
+    # Move to cpu after training 
+    model1_nosym=model1_nosym.to('cpu')
+    model2_nosym=model2_nosym.to('cpu')
+    t_tensor = t_tensor.to('cpu')
+    x_tensor = x_tensor.to('cpu')
+    x_dot_tensor = x_dot_tensor.to('cpu')
+    x_ddot_tensor = x_ddot_tensor.to('cpu')
+    F_ext_tensor = F_ext_tensor.to('cpu')
+    zero_input = zero_input.to('cpu')
+    
+    model1_nosym.eval()
+    model2_nosym.eval()
+    with torch.no_grad():
+        predicted_F1_nosym = model1_nosym(xdot_vals_tensor).numpy()
+        predicted_F2_nosym = model2_nosym(x_vals_tensor).numpy()
+        shift_NN=model2_nosym(zero_input).numpy()
+        predicted_F1_nosym_shifted = predicted_F1_nosym+shift_NN
+        predicted_F2_nosym_shifted = predicted_F2_nosym-shift_NN
+    def NN_nosym_model(t, y):
+        x = torch.tensor([[y[0]]], dtype=torch.float32)
+        x_dot = torch.tensor([[y[1]]], dtype=torch.float32)
+        t_tensor = torch.tensor([[t]], dtype=torch.float32)
+        F_ext_tensor = torch.tensor([[F_ext(t)]], dtype=torch.float32)
+        model1_nosym.eval()
+        model2_nosym.eval()
+        with torch.no_grad(): # Neural net-based force computation
+            force = F_ext_tensor - model1_nosym(x_dot) - model2_nosym(x)
+        x_ddot = force.item()
+        return [y[1], x_ddot] 
+        
+    # plotting obtained CCs
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(5, 8))
+    ax1.plot(xdot_vals, predicted_F1_nosym_shifted , label="Identified", linewidth=2)
+    ax1.plot(xdot_vals, F1(xdot_vals), '--',color='black', label="Theor.", linewidth=2)
+    ax1.set_title("Obtained CCs from baseline NN-CC method")
+    ax1.set_xlabel(r"$\dot{x}$")
+    ax1.set_ylabel(r"f$_1(\dot{x})$")
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+    ax2.plot(x_vals, predicted_F2_nosym_shifted , label="Identified", linewidth=2)
+    ax2.plot(x_vals, F2(x_vals), '--',color='black', label="Theor.", linewidth=3)
+    ax2.set_ylabel(r"f$_2$(x)")
+    ax2.set_xlabel("x")
+    ax2.legend()
+    ax2.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+
+    sol = solve_ivp(NN_nosym_model, t_span, y0, t_eval=t_simul,method='LSODA') 
+    x_sim = sol.y[0]
+    xdot_sim = sol.y[1]
+    plt.figure(figsize=(8,5))
+    plt.plot(time_data[0:len(x_sim)], x_sim, label="NN-CC", linewidth=2)
+    plt.plot(time_data, x_data,"--",color='black', label="Training data", linewidth=2)
+    plt.xlabel("t")
+    plt.ylabel("x(t)")
+    plt.legend()
+    plt.title("Simulation with baseline NN-CC model")
+    plt.show()
+
+
+
+    #########################################################################
+    #############  NN-CC+post-SR (adding post-processing)    ######### 
+    print(" ")
+    print("now doing post-SR to NN-CC")
+    
+    Xdot=xdot_vals.reshape(-1,1)
+    Yobjective=predicted_F1_nosym_shifted   
+#    Xdot = x_dot_lin_data.reshape(-1, 1)
+#    Xdotpred = x_dot_lin.reshape(-1, 1)
+#    correction_extra=0.0
+    start=time.time()
+#    y = predicted_lin_F1_data + bias_correction + correction_extra
+    model_f1SR_nosym = PySRRegressor(
+        niterations=100,
+        binary_operators=["+", "-", "*"],
+        #unary_operators=["sin", "cos", "exp", "log", "abs", "sqrt","sign"],
+        #unary_operators=["abs", "sqrt","sign"],
+        loss="loss(x, y) = (x - y)^2",
+        maxsize=20,
+        populations=20,
+        #procs=n_cores,
+        #verbosity=1,
+    )
+    model_f1SR_nosym.fit(Xdot, Yobjective)
+    print(model_f1SR_nosym)
+    best_equation = model_f1SR_nosym.get_best()
+    predicted_F1_nosym_SR = model_f1SR_nosym.predict(Xdot)
+    #pred_f1SR = model_f1SR.predict(Xdotpred)    
+
+
+    X = x_vals.reshape(-1, 1)
+    Yobjective = predicted_F2_nosym_shifted
+    model_f2SR_nosym = PySRRegressor(
+        niterations=100,
+        binary_operators=["+", "-", "*"],
+        #unary_operators=["log", "abs", "sqrt","sin", "cos", "exp"],
+        loss="loss(x, y) = (x - y)^2",
+        maxsize=20,
+        populations=20,
+        #verbosity=1,
+    )
+    model_f2SR_nosym.fit(X, Yobjective)
+    print(model_f2SR_nosym)
+    best_equation = model_f2SR_nosym.get_best()
+    predicted_F2_nosym_SR = model_f2SR_nosym.predict(X)
+    end = time.time()  
+    elapsed = end - start
+    print(r'End doing post-SR to NN-CC . i.e. NN-CC$_{+post\!\!-\!\!SR}$')
+    print(f"Training finished in {elapsed:.3f} seconds")
+
+    # plotting obtained CCs
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(5, 8))
+    ax1.plot(xdot_vals, predicted_F1_nosym_shifted, label=r"NN-CC", linewidth=2)
+    ax1.plot(xdot_vals, predicted_F1_nosym_SR, label=r"NN-CC$_{+post\!\!-\!\!SR}$", linewidth=2)
+    ax1.plot(xdot_vals, F1(xdot_vals), '--',color='black', label="Theor.", linewidth=2)
+    ax1.set_title(r"Obtained CCs from NN-CC$_{+post\!\!-\!\!SR}$ model")
+    ax1.set_xlabel(r"$\dot{x}$")
+    ax1.set_ylabel(r"f$_1(\dot{x})$")
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+    ax2.plot(x_vals, predicted_F2_nosym_shifted, label=r"NN-CC$", linewidth=2)
+    ax2.plot(x_vals, predicted_F2_nosym_SR, label=r"NN-CC$_{+post\!\!-\!\!SR}$", linewidth=2)
+    ax2.plot(x_vals, F2(x_vals), '--',color='black', label="Theor.", linewidth=3)
+    ax2.set_ylabel(r"f$_2$(x)")
+    ax2.set_xlabel("x")
+    ax2.legend()
+    ax2.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+
+
+    # Lambdify f1 and f2 for forward simulations
+    expr_f1_nosym = model_f1SR_nosym.sympy()
+    f1_lambda = sp.lambdify(sp.symbols("x0"), expr_f1_nosym, "numpy")
+    expr_f1_nosym_smooth = expr_f1_nosym.replace(sp.sign, lambda arg: sp.tanh(500*arg))
+    expr_f1_nosym_smooth = expr_f1_nosym_smooth.replace(sp.Abs, lambda arg: sp.sqrt(arg**2+1e-6))
+    print(model_f1SR_nosym.sympy())
+    print(expr_f1_nosym_smooth)
+    f1_nosym_lambda = sp.lambdify(sp.symbols("x0"), expr_f1_nosym_smooth, "numpy")
+    expr_f2_nosym = model_f2SR_nosym.sympy()
+    f2_nosym_lambda = sp.lambdify(sp.symbols("x0"), expr_f2_nosym, "numpy")
+    def NN_nosym_SR_model(t, y):
+        x_val = y[0]
+        x_dot_val = y[1]
+        F_ext_val = F_ext(t)
+        f1_val = f1_nosym_lambda(x_dot_val)
+        f2_val = f2_nosym_lambda(x_val)
+        x_ddot = F_ext_val - f1_val - f2_val
+        return [x_dot_val, x_ddot]  
+        
+    sol = solve_ivp(NN_nosym_SR_model, t_span, y0, t_eval=t_simul,method='LSODA')     
+    x_sim = sol.y[0]
+    xdot_sim = sol.y[1]
+    plt.figure(figsize=(8,5))
+    plt.plot(time_data[0:len(x_sim)], x_sim, label=r"NN-CC$_{+post\!\!-\!\!SR}$", linewidth=2)
+    plt.plot(time_data, x_data,"--",color='black', label="Training data", linewidth=2)
+    plt.xlabel("t")
+    plt.ylabel("x(t)")
+    plt.legend()
+    plt.title(r"Simulation with NN-CC$_{+post\!\!-\!\!SR}$ model")
+    plt.show()        
+ 
+
+
+
+    #######################################################
+    #############  NN-CC+sym (WITH SYMMETRIES)    ######### 
+    #for neurons in [150,20,50,100,200]:
+    #neurons=2
+    #neurons=100
+    # Hyperparameters
+    #learning_rate = 1e-4
+    #epochs_max = 20000
+    #N_constraint = 1000
+    
+    # Many the lines here are repeated for reusability, 
+    # i.e. NN-CC without symmetries block can be commented 
+    t_max =  np.max(t_simul)
+    t_tensor = torch.tensor(t_simul, dtype=torch.float32).unsqueeze(1).to(device)
+    x_tensor = torch.tensor(x_data, dtype=torch.float32).unsqueeze(1).to(device)
+    x_dot_tensor = torch.tensor(x_dot_data, dtype=torch.float32).unsqueeze(1).to(device)
+    x_ddot_tensor = torch.tensor(x_ddot_data, dtype=torch.float32).unsqueeze(1).to(device)
+    F_ext_tensor = torch.tensor(F_ext_noise_data, dtype=torch.float32).unsqueeze(1).to(device)
+    # define tensors from linear space to then evaluate CCs
+    x_vals_tensor = torch.tensor(x_vals, dtype=torch.float32).unsqueeze(1).to('cpu')
+    xdot_vals_tensor = torch.tensor(xdot_vals, dtype=torch.float32).unsqueeze(1).to('cpu')
+
+    #x_dot_constraint = torch.linspace(min(x_dot_data), max(x_dot_data), N_constraint).unsqueeze(1).to(device)
+    #x_constraint     = torch.linspace(min(x_data),  max(x_data),     N_constraint).unsqueeze(1).to(device)
+    x_dot_constraint = torch.linspace(x_dot_data.min(), x_dot_data.max(), N_constraint, device=device).unsqueeze(1)
+    x_constraint     = torch.linspace(x_data.min(),     x_data.max(),     N_constraint, device=device).unsqueeze(1)
+    
+    # Define the Neural Network
+    class NN1(nn.Module):
+        def __init__(self):
+            super(NN1, self).__init__()
+            self.fc1 = nn.Linear(1, neurons)
+            self.fc2 = nn.Linear(neurons, neurons)
+            self.fc3 = nn.Linear(neurons, neurons)
+            self.fc4 = nn.Linear(neurons, 1)
+        #    self.fc5 = nn.Linear(neurons, 1)
+        def forward(self, x):
+            #x = torch.relu(self.fc1(x))
+            #x = torch.relu(self.fc2(x))
+            #x = torch.nn.functional.leaky_relu(self.fc1(x),0.01)
+            #x = torch.nn.functional.leaky_relu(self.fc2(x),0.01)
+            #x = torch.nn.functional.leaky_relu(self.fc3(x),0.01)
+            x = torch.relu(self.fc1(x))
+            x = torch.relu(self.fc2(x))
+            x = torch.relu(self.fc3(x))
+            #x = torch.relu(self.fc3(x))
+            #x = torch.relu(self.fc4(x))
+            return self.fc4(x)
+    # relu tanh sigmoid(good) rrelu nn.functional.softplus
+    # rrelu nn.functional.silu rrelu nn.functional.selu
+    # rrelu nn.functional.gelu
+    class NN2(nn.Module):
+        def __init__(self):
+            super(NN2, self).__init__()
+            self.fc1 = nn.Linear(1, neurons)
+            self.fc2 = nn.Linear(neurons, neurons)
+            self.fc3 = nn.Linear(neurons, neurons)
+            self.fc4 = nn.Linear(neurons, 1)
+            #self.fc4 = nn.Linear(neurons, neurons)
+            #self.fc5 = nn.Linear(neurons, 1)
+        def forward(self, x):
+            #x = torch.nn.functional.leaky_relu(self.fc1(x),0.01)
+            #x = torch.nn.functional.leaky_relu(self.fc2(x),0.01)
+            #x = torch.nn.functional.leaky_relu(self.fc3(x),0.01)
+            x = torch.relu(self.fc1(x))
+            x = torch.relu(self.fc2(x))
+            x = torch.relu(self.fc3(x))
+            #x = torch.relu(self.fc3(x))
+            #x = torch.relu(self.fc4(x))
+            return self.fc4(x)
+
+
+    # Instantiate the model
+    model1 = NN1().to(device)
+    model2 = NN2().to(device)
+    criterion = nn.MSELoss()
+    optimizer1 = optim.Adam(model1.parameters(), lr=learning_rate )
+    optimizer2 = optim.Adam(model2.parameters(), lr=learning_rate )
+
+    #optimizer1 = optim.AdamW(model1.parameters(), lr=learning_rate , weight_decay=weight_decay)
+    #optimizer2 = optim.AdamW(model2.parameters(), lr=learning_rate , weight_decay=weight_decay)
+    
+    #optimizer1 = optim.SGD(model1.parameters(), lr=learning_rate , momentum=momentum) # working well with lr=1e-1
+    #optimizer2 = optim.SGD(model2.parameters(), lr=learning_rate , momentum=momentum)
+
+    zero_input = torch.tensor([[0.0]], dtype=torch.float32).to(device)
+    time_start=time.time()
+    for epoch in range(epochs_max):
+        model1.train()
+        model2.train()
+        predictions = x_ddot_tensor + model1(x_dot_tensor) + model2(x_tensor)
+        loss = criterion(predictions, F_ext_tensor)
+        # Add constraint: model2(0.0) ≈ 0
+        restriction_loss=0.0
+        if(apply_restriction):
+            #zero_input = torch.tensor([[0.0]], dtype=torch.float32).to(device)
+            model2_at_zero = model2(zero_input)
+            model1_at_zero = model1(zero_input)
+            restriction_loss = lambda_penalty * ((model2_at_zero ** 2).mean() + (model1_at_zero ** 2).mean())  
+            total_loss = loss + restriction_loss
+        else:
+            total_loss = loss
+        f1_loss=0.0
+        f2_loss=0.0
+        if f1_symmetry == 'even':
+            f1_loss = lambda_penalty_symm * ((model1(x_dot_constraint) - model1(-x_dot_constraint)) ** 2).mean()
+        elif f1_symmetry == 'odd':
+            f1_loss = lambda_penalty_symm * ((model1(x_dot_constraint) + model1(-x_dot_constraint)) ** 2).mean()
+        total_loss += f1_loss        
+        if f2_symmetry == 'even':
+            f2_loss = lambda_penalty_symm * ((model2(x_constraint) - model2(-x_constraint)) ** 2).mean()
+        elif f2_symmetry == 'odd':
+            f2_loss = lambda_penalty_symm * ((model2(x_constraint) + model2(-x_constraint)) ** 2).mean()
+        total_loss += f2_loss                
+        constraint_loss = restriction_loss + f1_loss + f2_loss
+        # Backward pass and optimization
+        optimizer1.zero_grad()
+        optimizer2.zero_grad()
+        total_loss.backward()
+        optimizer1.step()
+        optimizer2.step()
+        # Print the loss
+        if epoch == 0 or (epoch + 1) % 100 == 0:
+            # uncomment for testing printing each loss term individually
+            #print(f"Epoch [{epoch+1}], Loss: {loss.item():.4e}, Constraint: {constraint_loss.item():.4e}, f1_loss: {f1_loss.item():.2e}, f2_loss: {f2_loss.item():.2e}")
+            print(f"Epoch [{epoch+1}], Loss: {loss.item():.4e}, Constraints: {constraint_loss.item():.4e}")
+        if total_loss.item() < error_threshold:
+            print(f"Training stopped at epoch {epoch}, Total Loss: {total_loss.item()}")
+            break
+    time_end=time.time()
+    print(" ")
+    print("End training NN-CC+sym")
+    print("Neurons :",neurons)
+    print(f"Training time: {time_end-time_start} seconds")
+
+    # After training move to cpu
+    model1=model1.to('cpu')
+    model2=model2.to('cpu')
+    t_tensor = t_tensor.to('cpu')
+    x_tensor = x_tensor.to('cpu')
+    x_dot_tensor = x_dot_tensor.to('cpu')
+    x_ddot_tensor = x_ddot_tensor.to('cpu')
+    F_ext_tensor = F_ext_tensor.to('cpu')
+    zero_input = zero_input.to('cpu')
+
+
+    model1.eval()
+    model2.eval()
+    with torch.no_grad():
+        predicted_F1_sym = model1(xdot_vals_tensor).numpy()
+        predicted_F2_sym = model2(x_vals_tensor).numpy()
+        shift_NN_sym=model2(zero_input).numpy()
+        predicted_F1_sym_shifted = predicted_F1_sym+shift_NN_sym
+        predicted_F2_sym_shifted = predicted_F2_sym-shift_NN_sym
+    def NN_sym_model(t, y):
+        x = torch.tensor([[y[0]]], dtype=torch.float32)
+        x_dot = torch.tensor([[y[1]]], dtype=torch.float32)
+        t_tensor = torch.tensor([[t]], dtype=torch.float32)
+        F_ext_tensor = torch.tensor([[F_ext(t)]], dtype=torch.float32)
+        model1.eval()
+        model2.eval()
+        with torch.no_grad(): # Neural net-based force computation
+            force = F_ext_tensor - model1(x_dot) - model2(x)
+        x_ddot = force.item()
+        return [y[1], x_ddot] 
+        
+    # plotting obtained CCs
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(5, 8))
+    ax1.plot(xdot_vals, predicted_F1_sym_shifted, label="Identified", linewidth=2)
+    ax1.plot(xdot_vals, F1(xdot_vals), '--',color='black', label="Theor.", linewidth=2)
+    ax1.set_title(r"Obtained CCs from NN-CC$_{+sym}$ method")
+    ax1.set_xlabel(r"$\dot{x}$")
+    ax1.set_ylabel(r"f$_1(\dot{x})$")
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+    ax2.plot(x_vals, predicted_F2_sym_shifted, label="Identified", linewidth=2)
+    ax2.plot(x_vals, F2(x_vals), '--',color='black', label="Theor.", linewidth=3)
+    ax2.set_ylabel(r"f$_2$(x)")
+    ax2.set_xlabel("x")
+    ax2.legend()
+    ax2.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+
+    sol = solve_ivp(NN_sym_model, t_span, y0, t_eval=t_simul,method='LSODA') 
+    x_sim = sol.y[0]
+    xdot_sim = sol.y[1]
+    plt.figure(figsize=(8,5))
+    plt.plot(time_data[0:len(x_sim)], x_sim, label=r"NN-CC$_{+sym}$", linewidth=2)
+    plt.plot(time_data, x_data,"--",color='black', label="Training data", linewidth=2)
+    plt.xlabel("t")
+    plt.ylabel("x(t)")
+    plt.legend()
+    plt.title(r"Simulation with NN-CC$_{+sym}$ model")
+    plt.show()
+
+    #########################################################################
+    #############  NN-CC+sym+post-SR (adding post-processing)    ######### 
+    print(" ")
+    print("now doing post-SR to NN-CC+sym")
+    
+    Xdot=xdot_vals.reshape(-1,1)
+    Yobjective=predicted_F1_sym_shifted   
+#    Xdot = x_dot_lin_data.reshape(-1, 1)
+#    Xdotpred = x_dot_lin.reshape(-1, 1)
+#    correction_extra=0.0
+    start=time.time()
+#    y = predicted_lin_F1_data + bias_correction + correction_extra
+    model_f1SR = PySRRegressor(
+        niterations=100,
+        binary_operators=["+", "-", "*"],
+        #unary_operators=["sin", "cos", "exp", "log", "abs", "sqrt","sign"],
+        #unary_operators=["abs", "sqrt","sign"],
+        loss="loss(x, y) = (x - y)^2",
+        maxsize=20,
+        populations=20,
+        #procs=n_cores,
+        #verbosity=1,
+    )
+    model_f1SR.fit(Xdot, Yobjective)
+    print(model_f1SR)
+    best_equation = model_f1SR.get_best()
+    predicted_F1_sym_SR = model_f1SR.predict(Xdot)
+    #pred_f1SR = model_f1SR.predict(Xdotpred)    
+
+
+    X = x_vals.reshape(-1, 1)
+    Yobjective = predicted_F2_sym_shifted
+    model_f2SR = PySRRegressor(
+        niterations=100,
+        binary_operators=["+", "-", "*"],
+        #unary_operators=["log", "abs", "sqrt","sin", "cos", "exp"],
+        loss="loss(x, y) = (x - y)^2",
+        maxsize=20,
+        populations=20,
+        #verbosity=1,
+    )
+    model_f2SR.fit(X, Yobjective)
+    print(model_f2SR)
+    best_equation = model_f2SR.get_best()
+    predicted_F2_sym_SR = model_f2SR.predict(X)
+    end = time.time()  
+    elapsed = end - start
+    print(r'End doing post-SR to NN-CC+sym . i.e. NN-CC$_{+sym+post\!\!-\!\!SR}$')
+    print(f"Training finished in {elapsed:.3f} seconds")
+
+    # plotting obtained CCs
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(5, 8))
+    ax1.plot(xdot_vals, predicted_F1_sym_shifted, label=r"NN-CC$_{+sym}$", linewidth=2)
+    ax1.plot(xdot_vals, predicted_F1_sym_SR, label=r"NN-CC$_{+sym+post\!\!-\!\!SR}$", linewidth=2)
+    ax1.plot(xdot_vals, F1(xdot_vals), '--',color='black', label="Theor.", linewidth=2)
+    ax1.set_title(r"Obtained CCs from NN-CC$_{+sym+post\!\!-\!\!SR}$ model")
+    ax1.set_xlabel(r"$\dot{x}$")
+    ax1.set_ylabel(r"f$_1(\dot{x})$")
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+    ax2.plot(x_vals, predicted_F2_sym_shifted, label=r"NN-CC$_{+sym}$", linewidth=2)
+    ax2.plot(x_vals, predicted_F2_sym_SR, label=r"NN-CC$_{+sym+post\!\!-\!\!SR}$", linewidth=2)
+    ax2.plot(x_vals, F2(x_vals), '--',color='black', label="Theor.", linewidth=3)
+    ax2.set_ylabel(r"f$_2$(x)")
+    ax2.set_xlabel("x")
+    ax2.legend()
+    ax2.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.show()
+
+
+    # Lambdify f1 and f2 for forward simulations
+    expr_f1 = model_f1SR.sympy()
+    f1_lambda = sp.lambdify(sp.symbols("x0"), expr_f1, "numpy")
+    expr_f1_smooth = expr_f1.replace(sp.sign, lambda arg: sp.tanh(500*arg))
+    expr_f1_smooth = expr_f1_smooth.replace(sp.Abs, lambda arg: sp.sqrt(arg**2+1e-6))
+    print(model_f1SR.sympy())
+    print(expr_f1_smooth)
+    f1_lambda = sp.lambdify(sp.symbols("x0"), expr_f1_smooth, "numpy")
+    expr_f2 = model_f2SR.sympy()
+    f2_lambda = sp.lambdify(sp.symbols("x0"), expr_f2, "numpy")
+    def NN_sym_SR_model(t, y):
+        x_val = y[0]
+        x_dot_val = y[1]
+        F_ext_val = F_ext(t)
+        f1_val = f1_lambda(x_dot_val)
+        f2_val = f2_lambda(x_val)
+        x_ddot = F_ext_val - f1_val - f2_val
+        return [x_dot_val, x_ddot]  
+        
+    sol = solve_ivp(NN_sym_SR_model, t_span, y0, t_eval=t_simul,method='LSODA')     
+    x_sim = sol.y[0]
+    xdot_sim = sol.y[1]
+    plt.figure(figsize=(8,5))
+    plt.plot(time_data[0:len(x_sim)], x_sim, label=r"NN-CC$_{+sym+post\!\!-\!\!SR}$", linewidth=2)
+    plt.plot(time_data, x_data,"--",color='black', label="Training data", linewidth=2)
+    plt.xlabel("t")
+    plt.ylabel("x(t)")
+    plt.legend()
+    plt.title(r"Simulation with NN-CC$_{+sym+post\!\!-\!\!SR}$ model")
+    plt.show()        
+ 
+
+
+
+    ##########################################
+    # Evaluation of the f1 and f2 functions
+    ##########################################
+    predicted_F1_param = f1_param(xdot_vals).flatten() # parametric-CC
+    predicted_F1_theor = F1(xdot_vals).flatten() # theor
+    #predicted_F1_poly = f1_fit_shifted.flatten() # Poly-CC
+    #predicted_F1_syndycc = f1_sindy(xdot_vals).flatten() #  SINDy-CC
+    #if(SR_crossed_terms==False):
+    #    predicted_F1_SR = f1_fun_sr(xdot_vals).flatten() # SR
+    #else:
+    #    predicted_F1_SR = np.full_like(xdot_vals,1e6).flatten()
+    predicted_F1_NNCC = predicted_F1_nosym_shifted.flatten()  # NN-CC
+    predicted_F1_NNCC_nosym_SR = model_f1SR_nosym.predict(xdot_vals.reshape(-1,1)) # NN-CC(+sym+post-SR)
+    predicted_F1_NNCC_sym = predicted_F1_sym_shifted.flatten()   # NN-CC(+sym)
+    predicted_F1_NNCC_sym_SR = model_f1SR.predict(xdot_vals.reshape(-1,1)) # NN-CC(+sym+post-SR)
+
+    predicted_F2_param = f2_param(x_vals).flatten() # parametric-CC
+    predicted_F2_theor = F2(x_vals).flatten() # theor
+    #predicted_F2_poly = f2_fit_shifted.flatten() # Poly-CC
+    #predicted_F2_syndycc = f2_sindy(x_vals).flatten() #  SINDy-CC
+    #if(SR_crossed_terms==False):
+    #    predicted_F2_SR = f2_fun_sr(x_vals).flatten() # SR
+    #else:
+    #    predicted_F2_SR = np.full_like(x_vals,1e6).flatten()
+    predicted_F2_NNCC = predicted_F2_nosym_shifted.flatten()  # NN-CC
+    predicted_F2_NNCC_nosym_SR = model_f2SR_nosym.predict(x_vals.reshape(-1,1)) # NN-CC(+sym+post-SR)
+    predicted_F2_NNCC_sym = predicted_F2_sym_shifted.flatten()   # NN-CC(+sym)
+    predicted_F2_NNCC_sym_SR = model_f2SR.predict(x_vals.reshape(-1,1)) # NN-CC(+sym+post-SR)
+    
+    
+
+    # 1. Define RMSE function
+    def rmse(y_true, y_pred):
+        # Flattening ensures shapes like (N,1) and (N,) don't cause broadcasting errors
+        return np.sqrt(np.mean((y_true.flatten() - y_pred.flatten()) ** 2))
+
+    # 2. Construct the Dictionary with new variables
+    rmse_values = {
+        "noise_perc_th": noise_percentage_th,
+        "noise_perc": noise_percentage,
+        "SNR_dB": SNR_dB,
+        
+        # Neural Network Variants
+        "NN_nosym_f1": rmse(predicted_F1_theor, predicted_F1_NNCC),
+        "NN_nosym_f2": rmse(predicted_F2_theor, predicted_F2_NNCC),
+
+        "NN_postSR_f1_nosym": rmse(predicted_F1_theor, predicted_F1_NNCC_nosym_SR),
+        "NN_postSR_f2_nosym": rmse(predicted_F2_theor, predicted_F2_NNCC_nosym_SR),
+        
+        "NN_sym_f1": rmse(predicted_F1_theor, predicted_F1_NNCC_sym),
+        "NN_sym_f2": rmse(predicted_F2_theor, predicted_F2_NNCC_sym),
+        
+        "NN_postSR_f1": rmse(predicted_F1_theor, predicted_F1_NNCC_sym_SR),
+        "NN_postSR_f2": rmse(predicted_F2_theor, predicted_F2_NNCC_sym_SR),
+
+        # Other Methods
+        #"SINDy_f1": rmse(predicted_F1_theor, predicted_F1_syndycc),
+        #"SINDy_f2": rmse(predicted_F2_theor, predicted_F2_syndycc),
+        
+        #"Poly_f1": rmse(predicted_F1_theor, predicted_F1_poly),
+        #"Poly_f2": rmse(predicted_F2_theor, predicted_F2_poly),
+        
+        "Param_f1": rmse(predicted_F1_theor, predicted_F1_param),
+        "Param_f2": rmse(predicted_F2_theor, predicted_F2_param),
+        
+        #"SR_f1": rmse(predicted_F1_theor, predicted_F1_SR),
+        #"SR_f2": rmse(predicted_F2_theor, predicted_F2_SR),
+    }
+
+    # 3. Print specific console output
+    print("-" * 40)
+    print(f"NN-CC (No Sym) f1       = {rmse_values['NN_nosym_f1']:.4e}")
+    print(f"NN-CC (No Sym) f2       = {rmse_values['NN_nosym_f2']:.4e}")
+
+    print(f"NN-CC (+Post-SR) f1 = {rmse_values['NN_postSR_f1_nosym']:.4e}")
+    print(f"NN-CC (+Post-SR) f2 = {rmse_values['NN_postSR_f2_nosym']:.4e}")
+
+    print(f"NN-CC (+Sym) f1         = {rmse_values['NN_sym_f1']:.4e}")
+    print(f"NN-CC (+Sym) f2         = {rmse_values['NN_sym_f2']:.4e}")
+
+    print(f"NN-CC (+Sym+Post-SR) f1 = {rmse_values['NN_postSR_f1']:.4e}")
+    print(f"NN-CC (+Sym+Post-SR) f2 = {rmse_values['NN_postSR_f2']:.4e}")
+    print("-" * 40)
+
+    # 4. Write to file
+    fname = "rmse_results_for_f1_and_f2.txt"
+    header = "# " + " ".join(rmse_values.keys())
+
+    # Formats values to scientific notation. 
+    # np.ravel(v)[0] ensures we extract a scalar float even if v is a numpy array.
+    line = " ".join(f"{float(np.ravel(v)[0]):.4e}" for v in rmse_values.values())
+
+    mode = "a" if os.path.exists(fname) else "w"
+    with open(fname, mode) as f:
+        if mode == "w":
+            f.write(header + "\n")
+            print("Created new file with header:")
+            print(header)
+        f.write(line + "\n")
+
+    print(f"Appended results to {fname}")
+    print("Line written:", line)
+    
+    
+
+
+
+
+    ################################################################################
+    ################################################################################
+    ################################   VALIDATION   ################################
+    ################################################################################
+    ################################################################################
+
+
+
+    print('Validating the system')
+    print('Integration of model EDOs')
+
+    n_trials = 10  # number of random initial conditions
+    #rmse_x_NN_list = []
+    #rmse_x_dot_NN_list = []
+    #rmse_x_Sindy_list = []
+    #rmse_x_dot_Sindy_list = []
+    #rmse_x_LS_list = []
+    #rmse_x_dot_LS_list = []
+
+
+#    for i in range(n_trials):
+# Validation Loop Variables
+    n_trials = 1        # Target number of valid simulations
+    valid_trials = 0     # Counter for valid simulations
+    attempts = 0         # Counter for total attempts (to prevent infinite loops if needed)
+    max_attempts = 1000   # Safety break
+
+    print(f"Starting search for {n_trials} valid simulations inside the training range...")
+
+    while valid_trials < n_trials:
+        attempts += 1
+        if attempts > max_attempts:
+            print("Max attempts reached. Stopping validation.")
+            break
+
+
+        # Random initial conditions uncomment
+        #x0_val = np.round(np.random.uniform(-0.5, 0.5),3)
+        #v0_val = np.round(np.random.uniform(-0.5, 0.5),3)
+        #y0_val = [x0_val, v0_val]
+        #Aext = np.round(np.random.uniform(0.45, 0.5),3)      
+        #Omega = np.round(np.random.uniform(1.1, 1.3),3)
+        
+        #same initial conditions 
+        x0_val = x0 
+        v0_val = v0 
+        y0_val = [x0_val, v0_val]
+        #Aext = np.round(np.random.uniform(0.45, 0.5),3)      
+        #Omega = np.round(np.random.uniform(1.1, 1.3),3)
+        
+ #       Aext = np.round(np.random.uniform(0.1, 0.5),3)
+ #       Omega = np.round(np.random.uniform(1.1, 1.3),3)
+        
+        #A = np.round(np.random.uniform(1.0, 1.5),3)
+        #Omega = np.round(np.random.uniform(0.2, 0.4),3)
+        #x0_val=x0-0.05
+        #v0_val=v0+0.01
+               
+        #Aext=0.3
+        #alpha=-1.0
+        #beta=1.0
+        #delta=0.3
+        #Omega=1.2
+        #x0=0.5
+        #v0=-0.5
+        #x0_val=x0
+        #y0_val=y0
+        #y0=[x0,v0]
+        #y0_val=y0
+        
+
+        #x0_val=-0.8 #x0
+        #v0_val=0.7 #v0
+        #y0_val = [x0_val,v0_val]
+        #y0_val = y0
+        
+        
+        #kval = np.random.uniform(0.5, 1.)
+        #cval = np.random.uniform(0.1, 0.5)
+        #m = 1.0
+        #mu_N = np.random.uniform(0.5, 1.0)
+        #print(f"Trial {i+1} : x0={x0_val:.4f} ; v0={v0_val:.4f}")
+        #print(r"$\A$="+f"{A:.4f} ; "+r"$\Omega$"+f"={Omega:.4f}")
+        print(f"Trial {attempts} :")
+        #print(f"alpha={alpha}, c={cval}")
+        #print(f"$\Omega$={Omega}, $\mu$*N={mu_N}, $x_0$={x0}, $v_0$={v0}")
+        #print(f"Omega={Omega}, A={A}, $x_0$={x0_val:.4f}, $v_0$={v0_val:.4f}")
+
+        #kval = np.round(np.random.uniform(1, 1.5),3)
+        #cval = np.round(np.random.uniform(0.1, 0.5),3)
+        #m = 1.0
+        #mu_N = np.round(np.random.uniform(0.5, 1.0),3)
+        #Omega = np.round(np.random.uniform(0.2, 0.5),3)
+        #x0 = np.round(np.random.uniform(-0.5, 0.5),3)
+        #v0 = np.round(np.random.uniform(-0.5, 0.5),3)
+
+
+
+        ################ Theoretical Eq ###### validation of the model
+        print("Integrating Theor.")
+        start = time.time()  
+        sol_val = solve_ivp(eq_2nd_ord_veloc, t_span_val, y0_val, t_eval=t_val,method='LSODA')
+        end = time.time()  
+        elapsed = end - start
+        print(f"Solve_ivp finished in {elapsed:.3f} seconds")
+        t_simulated_th = sol_val.t
+        x_simulated_th = sol_val.y[0]       
+        x_dot_simulated_th = sol_val.y[1]   
+        
+        #plt.figure()
+        #plt.plot(t_simulated_th, x_simulated_th, label="Validation: Theor. Integration")
+        #plt.legend()
+        #plt.xlabel("t")
+        #plt.ylabel("x(t)")
+        #plt.show()
+
+        if np.max(x_simulated_th)>np.max(x_data):
+            print("Extrapolation! max(x_sim)>max(x_train) :",np.max(x_simulated_th),">",np.max(x_data))
+        if np.min(x_simulated_th)<np.min(x_data):
+            print("Extrapolation! min(x_sim)<min(x_train) :",np.min(x_simulated_th),"<",np.min(x_data))
+
+        # --- CHECK BOUNDS ---
+        # Check if ANY point in the simulation goes outside the training box
+        is_out_x = np.any(x_simulated_th < np.min(x_data)) or np.any(x_simulated_th > np.max(x_data))
+        is_out_v = np.any(x_dot_simulated_th < np.min(x_dot_data)) or np.any(x_dot_simulated_th > np.max(x_dot_data))
+        
+        #if is_out_x or is_out_v:
+        #    # If outside, skip this trial (do not increment valid_trials)
+        #    print(f"Attempt {attempts}: Out of bounds. Retrying...") 
+        #    continue 
+        
+        # If we reach here, the curve is strictly inside the box
+        valid_trials += 1
+        print(f"Trial {valid_trials}/{n_trials} found (Attempt {attempts})")
+        
+
+
+
+
+        ################ parametric-CC ###### validation of the model
+        sol_parametric = solve_ivp(ode_param, t_span_val, y0_val, t_eval=t_val,method='LSODA')
+                        #rtol=1e-9, atol=1e-12, max_step=(t_eval[1] - t_eval[0]))   
+        t_parametric= sol_parametric.t
+        x_simulated_parametric = sol_parametric.y[0]
+        x_dot_simulated_parametric = sol_parametric.y[1]
+        plt.figure(figsize=(8,5))
+        plt.plot(t_parametric, x_simulated_parametric, "--", label="Parametric-CC", linewidth=2)
+        plt.plot(t_simulated_th, x_simulated_th, label="Theor.", linewidth=2)
+        plt.xlabel("t")
+        plt.ylabel("x(t)")
+        plt.legend()
+        plt.title("Parametric model simulation")
+        plt.show()
+
+
+        ################ NN-CC ###### 
+        def learned_dynamics(t, y):
+            x = torch.tensor([[y[0]]], dtype=torch.float32)
+            x_dot = torch.tensor([[y[1]]], dtype=torch.float32)
+            t_tensor = torch.tensor([[t]], dtype=torch.float32)
+            F_ext_tensor = torch.tensor([[F_ext(t)]], dtype=torch.float32)
+            model1_nosym.eval()
+            model2_nosym.eval()
+            with torch.no_grad(): # Neural net-based force computation
+                force = F_ext_tensor - model1_nosym(x_dot) - model2_nosym(x)
+            x_ddot = force.item()
+            return [y[1], x_ddot]  # dx/dt = x_dot, dx_dot/dt = x_ddot
+        print("Integrating NN")
+        start = time.time()  
+        x_simulated_NN=[]
+        x_dot_simulated_NN=[]
+        try:
+            sol = solve_ivp(learned_dynamics, t_span_val, y0_val, t_eval=t_val , method='LSODA') #,rtol=1e-7,atol=1e-7) #,  method='DOP853', rtol=1e-9, atol=1e-12)
+            x_simulated_NN_nosym = sol.y[0]
+            x_dot_simulated_NN_nosym = sol.y[1]            # check for NaNs or infs just in case
+            t_NN_nosym=sol.t
+            if np.any(np.isnan(x_simulated_NN_nosym)) or np.any(np.isinf(x_simulated_NN_nosym)):
+                print(f"Skipping trial {valid_trials}: NN simulation returned NaNs or infs.")
+        except Exception as e:
+            print(f"Skipping trial {valid_trials}: Exception during NN simulation -> {e}")
+        end = time.time()  
+        elapsed = end - start
+        print(f"Solve_ivp finished in {elapsed:.3f} seconds")
+
+        plt.figure()
+        plt.plot(t_NN_nosym, x_simulated_NN_nosym, label="NN-CC")
+        plt.plot(t_simulated_th, x_simulated_th, label="Theor.")
+        #plt.plot(time_data, x_data, label="true")
+        plt.legend()
+        plt.xlabel("t")
+        plt.ylabel("x(t)")
+        plt.show()
+
+
+
+        ################ NN+SR (nosym) ###### validation of the model
+        print("Integrating NN-CC nosym +post-SR")
+
+        # For f1
+        expr_f1_nosym = model_f1SR_nosym.sympy()
+        f1_nosym_lambda = sp.lambdify(sp.symbols("x0"), expr_f1_nosym, "numpy")
+        
+        expr_f1_nosym_smooth = expr_f1_nosym.replace(sp.sign, lambda arg: sp.tanh(500*arg))
+        expr_f1_nosym_smooth = expr_f1_nosym_smooth.replace(sp.Abs, lambda arg: sp.sqrt(arg**2+1e-6))
+        print(model_f1SR_nosym.sympy())
+        print(expr_f1_nosym_smooth)
+        f1_nosym_lambda = sp.lambdify(sp.symbols("x0"), expr_f1_nosym_smooth, "numpy")
+
+        # For f2
+        expr_f2_nosym = model_f2SR_nosym.sympy()
+        f2_nosym_lambda = sp.lambdify(sp.symbols("x0"), expr_f2_nosym, "numpy")
+        def learned_dynamics_SR_nosym(t, y):
+            x_val = y[0]
+            x_dot_val = y[1]
+            F_ext_val = F_ext(t)
+            f1_val = f1_nosym_lambda(x_dot_val)
+            f2_val = f2_nosym_lambda(x_val)
+            x_ddot = F_ext_val - f1_val - f2_val
+            return [x_dot_val, x_ddot]
+        start = time.time()  
+        try:
+            sol_nn_sr_nosym = solve_ivp(learned_dynamics_SR_nosym, t_span_val, y0_val, 
+                              t_eval=t_val, method="LSODA") #Radau DOP853, rtol=1e-6, atol=1e-9)
+            t_NN_SR_nosym = sol_nn_sr_nosym.t
+            x_simulated_NN_SR_nosym = sol_nn_sr_nosym.y[0]
+            x_dot_simulated_NN_SR_nosym = sol_nn_sr_nosym.y[1]
+            # check for NaNs or infs just in case
+            if np.any(np.isnan(x_simulated_NN_SR_nosym)) or np.any(np.isinf(x_simulated_NN_SR_nosym)):
+                print(f"Skipping trial {valid_trials}: NN-CC-SR simulation returned NaNs or infs.")
+
+        except Exception as e:
+            print(f"Skipping trial {valid_trials}: Exception during NN-CC-SR simulation -> {e}")
+
+        
+        end = time.time()  
+        elapsed = end - start
+        print(f"Solve_ivp finished in {elapsed:.3f} seconds")
+        
+
+        plt.figure()
+        plt.plot(t_NN_SR_nosym, x_simulated_NN_SR_nosym, label=r"NN-CC$_{+post\!\!-\!\!SR}$")
+        plt.plot(t_simulated_th, x_simulated_th, label="Theor.")
+        #plt.plot(time_data, x_data, label="true")
+        plt.legend()
+        plt.xlabel("Time")
+        plt.ylabel("x(t)")
+        plt.show()
+
+
+        ################ NN-CC+sym ###### 
+        def learned_dynamics(t, y):
+            x = torch.tensor([[y[0]]], dtype=torch.float32)
+            x_dot = torch.tensor([[y[1]]], dtype=torch.float32)
+            t_tensor = torch.tensor([[t]], dtype=torch.float32)
+            F_ext_tensor = torch.tensor([[F_ext(t)]], dtype=torch.float32)
+            model1.eval()
+            model2.eval()
+            with torch.no_grad(): # Neural net-based force computation
+                force = F_ext_tensor - model1(x_dot) - model2(x)
+            x_ddot = force.item()
+            return [y[1], x_ddot]  # dx/dt = x_dot, dx_dot/dt = x_ddot
+        print("Integrating NN")
+        start = time.time()  
+        x_simulated_NN=[]
+        x_dot_simulated_NN=[]
+        try:
+            sol = solve_ivp(learned_dynamics, t_span_val, y0_val, t_eval=t_val , method='LSODA') #,rtol=1e-7,atol=1e-7) #,  method='DOP853', rtol=1e-9, atol=1e-12)
+            x_simulated_NN = sol.y[0]
+            x_dot_simulated_NN = sol.y[1]            # check for NaNs or infs just in case
+            t_NN=sol.t
+            if np.any(np.isnan(x_simulated_NN)) or np.any(np.isinf(x_simulated_NN)):
+                print(f"Skipping trial {valid_trials}: NN simulation returned NaNs or infs.")
+        except Exception as e:
+            print(f"Skipping trial {valid_trials}: Exception during NN simulation -> {e}")
+        end = time.time()  
+        elapsed = end - start
+        print(f"Solve_ivp finished in {elapsed:.3f} seconds")
+
+        plt.figure()
+        plt.plot(t_NN, x_simulated_NN, label=r"NN-CC$_{+sym}$")
+        plt.plot(t_simulated_th, x_simulated_th, label="Theor.")
+        #plt.plot(time_data, x_data, label="true")
+        plt.legend()
+        plt.xlabel("t")
+        plt.ylabel("x(t)")
+        plt.show()
+
+
+        ################ NN+SR ###### validation of the model
+        print("Integrating NN-SR")
+
+        # For f1
+        expr_f1 = model_f1SR.sympy()
+        f1_lambda = sp.lambdify(sp.symbols("x0"), expr_f1, "numpy")
+        
+        expr_f1_smooth = expr_f1.replace(sp.sign, lambda arg: sp.tanh(500*arg))
+        expr_f1_smooth = expr_f1_smooth.replace(sp.Abs, lambda arg: sp.sqrt(arg**2+1e-6))
+        print(model_f1SR.sympy())
+        print(expr_f1_smooth)
+        f1_lambda = sp.lambdify(sp.symbols("x0"), expr_f1_smooth, "numpy")
+
+        # For f2
+        expr_f2 = model_f2SR.sympy()
+        f2_lambda = sp.lambdify(sp.symbols("x0"), expr_f2, "numpy")
+        def learned_dynamics_SR(t, y):
+            x_val = y[0]
+            x_dot_val = y[1]
+            F_ext_val = F_ext(t)
+            f1_val = f1_lambda(x_dot_val)
+            f2_val = f2_lambda(x_val)
+            x_ddot = F_ext_val - f1_val - f2_val
+            return [x_dot_val, x_ddot]
+        start = time.time()  
+        try:
+            sol_nn_sr = solve_ivp(learned_dynamics_SR, t_span_val, y0_val, 
+                              t_eval=t_val, method="LSODA") #Radau DOP853, rtol=1e-6, atol=1e-9)
+            t_NN_SR = sol_nn_sr.t
+            x_simulated_NN_SR = sol_nn_sr.y[0]
+            x_dot_simulated_NN_SR = sol_nn_sr.y[1]
+            # check for NaNs or infs just in case
+            if np.any(np.isnan(x_simulated_NN_SR)) or np.any(np.isinf(x_simulated_NN_SR)):
+                print(f"Skipping trial {valid_trials}: NN-CC+sym+post-SR simulation returned NaNs or infs.")
+
+        except Exception as e:
+            print(f"Skipping trial {valid_trials}: Exception during NN-CC+sym+post-SR simulation -> {e}")
+
+        
+        end = time.time()  
+        elapsed = end - start
+        print(f"Solve_ivp finished in {elapsed:.3f} seconds")
+        
+
+        plt.figure()
+        plt.plot(t_NN_SR, x_simulated_NN_SR, label=r"NN-CC$_{+sym+post\!\!-\!\!SR}$")
+        plt.plot(t_simulated_th, x_simulated_th, label="Theor.")
+        #plt.plot(time_data, x_data, label="true")
+        plt.legend()
+        plt.xlabel("Time")
+        plt.ylabel("x(t)")
+        plt.show()
+
+
+
+
+
+#        def custom_ticks(ax, major_x_interval, major_y_interval, minor_x_interval, minor_y_interval):
+#            # Set major ticks
+#            ax.xaxis.set_major_locator(ticker.MultipleLocator(major_x_interval))
+#            ax.yaxis.set_major_locator(ticker.MultipleLocator(major_y_interval))
+#            # Set minor ticks
+#            ax.xaxis.set_minor_locator(ticker.MultipleLocator(minor_x_interval))
+#            ax.yaxis.set_minor_locator(ticker.MultipleLocator(minor_y_interval))
+#            # Customize tick appearance
+#        #    ax.tick_params(axis='both', direction='in', which='major', length=8, width=1.5, labelsize=24)
+#        #    ax.tick_params(axis='both', direction='in', which='minor', length=5, width=1)
+#            ax.tick_params(axis='x', direction='in', which='major', length=8, width=1.5, labelsize=24, top=True, bottom=True)
+#            ax.tick_params(axis='y', direction='in', which='major', length=8, width=1.5, labelsize=24, left=True, right=True)
+#            ax.tick_params(axis='x', direction='in', which='minor', length=5, width=1, top=True,bottom=True)
+#            ax.tick_params(axis='y', direction='in', which='minor', length=5, width=1, left=True, right=True)
+
+
+
+        def custom_ticks(ax, major_x_interval, major_y_interval, minor_x_interval, minor_y_interval):
+            ax.xaxis.set_major_locator(ticker.MultipleLocator(major_x_interval))
+            ax.yaxis.set_major_locator(ticker.MultipleLocator(major_y_interval))
+            ax.xaxis.set_minor_locator(ticker.MultipleLocator(minor_x_interval))
+            ax.yaxis.set_minor_locator(ticker.MultipleLocator(minor_y_interval))
+            
+            ax.tick_params(axis='x', direction='in', which='major', length=8, width=1.5, labelsize=20, top=True, bottom=True)
+            ax.tick_params(axis='y', direction='in', which='major', length=8, width=1.5, labelsize=20, left=True, right=True)
+            ax.tick_params(axis='x', direction='in', which='minor', length=5, width=1, top=True, bottom=True)
+            ax.tick_params(axis='y', direction='in', which='minor', length=5, width=1, left=True, right=True)
+        
+        # 2. Setup the 1x3 Grid
+        fig, axs = plt.subplots(1, 3, figsize=(18, 5), sharey=True)
+        
+        # Data mapping for the three subplots
+        # Plot 1: NN-CC | Plot 2: NN-CC retrain | Plot 3: NN-CC-SR
+        methods_data = [x_simulated_NN_nosym, x_simulated_NN, x_simulated_NN_SR]
+        method_labels = ["NN-CC", r"NN-CC$_\text{+sym}$", r"NN-CC$_\text{+sym+post-SR}$"]
+        method_colors = ['magenta', 'teal', 'blue']
+        
+        for i in range(3):
+            ax = axs[i]
+            
+            ax.plot(t_val, methods_data[i], "-", color=method_colors[i], label=method_labels[i], linewidth=3)
+            ax.plot(t_val, x_simulated_th, '--',dashes=(1, 1), color='black', label="Theor.", linewidth=3)
+            
+            # Labels and Titles
+            ax.set_xlabel("$t$", fontsize=28)
+            if i == 0:
+                ax.set_ylabel("$x(t)$", fontsize=28)
+            
+            #ax.set_title(method_labels[i], fontsize=22)
+            ax.legend(fontsize=22, loc='upper right') # 'upper right'
+            
+            # Apply your custom styling
+            # Adjust intervals (20, 0.5) based on your data range
+            custom_ticks(ax, major_x_interval=10, major_y_interval=0.5, 
+                             minor_x_interval=5, minor_y_interval=0.25)
+            
+            # Optional: Add (a), (b), (c) markers
+            markers = ["(a)", "(b)", "(c)"]
+            #ax.text(0.97, 0.05, markers[i], transform=ax.transAxes, fontsize=28, va='bottom', ha='right')#, weight='bold'
+            ax.text(0.15, 0.05, markers[i], transform=ax.transAxes, fontsize=28, va='bottom', ha='right')#, weight='bold'
+        
+        plt.tight_layout()
+        
+        # 3. Save the figure
+        folder_path = output_path
+        os.makedirs(folder_path, exist_ok=True)
+        file_path = os.path.join(folder_path, "Fig6abc_time_simulations_duffing_sameCI.pdf")
+        plt.savefig(file_path, format='pdf', bbox_inches='tight')
+        
+        plt.show()
+        print(f"Comparison plot saved to: {file_path}")
+       
+
+
+
+
+############### now integrating other ICs
+
+        #other initial conditions 
+        x0_val = 0.6
+        v0_val = -0.8 
+        y0_val = [x0_val, v0_val]
+        #Aext = np.round(np.random.uniform(0.45, 0.5),3)      
+        #Omega = np.round(np.random.uniform(1.1, 1.3),3)
+        
+ #       Aext = np.round(np.random.uniform(0.1, 0.5),3)
+ #       Omega = np.round(np.random.uniform(1.1, 1.3),3)
+        
+        #A = np.round(np.random.uniform(1.0, 1.5),3)
+        #Omega = np.round(np.random.uniform(0.2, 0.4),3)
+        #x0_val=x0-0.05
+        #v0_val=v0+0.01
+               
+        #Aext=0.3
+        #alpha=-1.0
+        #beta=1.0
+        #delta=0.3
+        #Omega=1.2
+        #x0=0.5
+        #v0=-0.5
+        #x0_val=x0
+        #y0_val=y0
+        #y0=[x0,v0]
+        #y0_val=y0
+        
+
+        #x0_val=-0.8 #x0
+        #v0_val=0.7 #v0
+        #y0_val = [x0_val,v0_val]
+        #y0_val = y0
+        
+        
+        #kval = np.random.uniform(0.5, 1.)
+        #cval = np.random.uniform(0.1, 0.5)
+        #m = 1.0
+        #mu_N = np.random.uniform(0.5, 1.0)
+        #print(f"Trial {i+1} : x0={x0_val:.4f} ; v0={v0_val:.4f}")
+        #print(r"$\A$="+f"{A:.4f} ; "+r"$\Omega$"+f"={Omega:.4f}")
+        print(f"Trial {attempts} :")
+        #print(f"alpha={alpha}, c={cval}")
+        #print(f"$\Omega$={Omega}, $\mu$*N={mu_N}, $x_0$={x0}, $v_0$={v0}")
+        #print(f"Omega={Omega}, A={A}, $x_0$={x0_val:.4f}, $v_0$={v0_val:.4f}")
+
+        #kval = np.round(np.random.uniform(1, 1.5),3)
+        #cval = np.round(np.random.uniform(0.1, 0.5),3)
+        #m = 1.0
+        #mu_N = np.round(np.random.uniform(0.5, 1.0),3)
+        #Omega = np.round(np.random.uniform(0.2, 0.5),3)
+        #x0 = np.round(np.random.uniform(-0.5, 0.5),3)
+        #v0 = np.round(np.random.uniform(-0.5, 0.5),3)
+
+
+
+        ################ Theoretical Eq ###### validation of the model
+        print("Integrating Theor.")
+        start = time.time()  
+        sol_val = solve_ivp(eq_2nd_ord_veloc, t_span_val, y0_val, t_eval=t_val,method='LSODA')
+        end = time.time()  
+        elapsed = end - start
+        print(f"Solve_ivp finished in {elapsed:.3f} seconds")
+        t_simulated_th = sol_val.t
+        x_simulated_th = sol_val.y[0]       
+        x_dot_simulated_th = sol_val.y[1]   
+        
+        #plt.figure()
+        #plt.plot(t_simulated_th, x_simulated_th, label="Validation: Theor. Integration")
+        #plt.legend()
+        #plt.xlabel("t")
+        #plt.ylabel("x(t)")
+        #plt.show()
+
+        if np.max(x_simulated_th)>np.max(x_data):
+            print("Extrapolation! max(x_sim)>max(x_train) :",np.max(x_simulated_th),">",np.max(x_data))
+        if np.min(x_simulated_th)<np.min(x_data):
+            print("Extrapolation! min(x_sim)<min(x_train) :",np.min(x_simulated_th),"<",np.min(x_data))
+
+        # --- CHECK BOUNDS ---
+        # Check if ANY point in the simulation goes outside the training box
+        is_out_x = np.any(x_simulated_th < np.min(x_data)) or np.any(x_simulated_th > np.max(x_data))
+        is_out_v = np.any(x_dot_simulated_th < np.min(x_dot_data)) or np.any(x_dot_simulated_th > np.max(x_dot_data))
+        
+        #if is_out_x or is_out_v:
+        #    # If outside, skip this trial (do not increment valid_trials)
+        #    print(f"Attempt {attempts}: Out of bounds. Retrying...") 
+        #    continue 
+        
+        # If we reach here, the curve is strictly inside the box
+        valid_trials += 1
+        print(f"Trial {valid_trials}/{n_trials} found (Attempt {attempts})")
+        
+
+
+
+
+        ################ parametric-CC ###### validation of the model
+        sol_parametric = solve_ivp(ode_param, t_span_val, y0_val, t_eval=t_val,method='LSODA')
+                        #rtol=1e-9, atol=1e-12, max_step=(t_eval[1] - t_eval[0]))   
+        t_parametric= sol_parametric.t
+        x_simulated_parametric = sol_parametric.y[0]
+        x_dot_simulated_parametric = sol_parametric.y[1]
+        plt.figure(figsize=(8,5))
+        plt.plot(t_parametric, x_simulated_parametric, "--", label="Parametric-CC", linewidth=2)
+        plt.plot(t_simulated_th, x_simulated_th, label="Theor.", linewidth=2)
+        plt.xlabel("t")
+        plt.ylabel("x(t)")
+        plt.legend()
+        plt.title("Parametric model simulation")
+        plt.show()
+
+
+        ################ NN-CC ###### 
+        def learned_dynamics(t, y):
+            x = torch.tensor([[y[0]]], dtype=torch.float32)
+            x_dot = torch.tensor([[y[1]]], dtype=torch.float32)
+            t_tensor = torch.tensor([[t]], dtype=torch.float32)
+            F_ext_tensor = torch.tensor([[F_ext(t)]], dtype=torch.float32)
+            model1_nosym.eval()
+            model2_nosym.eval()
+            with torch.no_grad(): # Neural net-based force computation
+                force = F_ext_tensor - model1_nosym(x_dot) - model2_nosym(x)
+            x_ddot = force.item()
+            return [y[1], x_ddot]  # dx/dt = x_dot, dx_dot/dt = x_ddot
+        print("Integrating NN")
+        start = time.time()  
+        x_simulated_NN=[]
+        x_dot_simulated_NN=[]
+        try:
+            sol = solve_ivp(learned_dynamics, t_span_val, y0_val, t_eval=t_val , method='LSODA') #,rtol=1e-7,atol=1e-7) #,  method='DOP853', rtol=1e-9, atol=1e-12)
+            x_simulated_NN_nosym = sol.y[0]
+            x_dot_simulated_NN_nosym = sol.y[1]            # check for NaNs or infs just in case
+            t_NN_nosym=sol.t
+            if np.any(np.isnan(x_simulated_NN_nosym)) or np.any(np.isinf(x_simulated_NN_nosym)):
+                print(f"Skipping trial {valid_trials}: NN simulation returned NaNs or infs.")
+        except Exception as e:
+            print(f"Skipping trial {valid_trials}: Exception during NN simulation -> {e}")
+        end = time.time()  
+        elapsed = end - start
+        print(f"Solve_ivp finished in {elapsed:.3f} seconds")
+
+        plt.figure()
+        plt.plot(t_NN_nosym, x_simulated_NN_nosym, label="NN-CC")
+        plt.plot(t_simulated_th, x_simulated_th, label="Theor.")
+        #plt.plot(time_data, x_data, label="true")
+        plt.legend()
+        plt.xlabel("t")
+        plt.ylabel("x(t)")
+        plt.show()
+
+
+
+        ################ NN+SR (nosym) ###### validation of the model
+        print("Integrating NN-CC nosym +post-SR")
+
+        # For f1
+        expr_f1_nosym = model_f1SR_nosym.sympy()
+        f1_nosym_lambda = sp.lambdify(sp.symbols("x0"), expr_f1_nosym, "numpy")
+        
+        expr_f1_nosym_smooth = expr_f1_nosym.replace(sp.sign, lambda arg: sp.tanh(500*arg))
+        expr_f1_nosym_smooth = expr_f1_nosym_smooth.replace(sp.Abs, lambda arg: sp.sqrt(arg**2+1e-6))
+        print(model_f1SR_nosym.sympy())
+        print(expr_f1_nosym_smooth)
+        f1_nosym_lambda = sp.lambdify(sp.symbols("x0"), expr_f1_nosym_smooth, "numpy")
+
+        # For f2
+        expr_f2_nosym = model_f2SR_nosym.sympy()
+        f2_nosym_lambda = sp.lambdify(sp.symbols("x0"), expr_f2_nosym, "numpy")
+        def learned_dynamics_SR_nosym(t, y):
+            x_val = y[0]
+            x_dot_val = y[1]
+            F_ext_val = F_ext(t)
+            f1_val = f1_nosym_lambda(x_dot_val)
+            f2_val = f2_nosym_lambda(x_val)
+            x_ddot = F_ext_val - f1_val - f2_val
+            return [x_dot_val, x_ddot]
+        start = time.time()  
+        try:
+            sol_nn_sr_nosym = solve_ivp(learned_dynamics_SR_nosym, t_span_val, y0_val, 
+                              t_eval=t_val, method="LSODA") #Radau DOP853, rtol=1e-6, atol=1e-9)
+            t_NN_SR_nosym = sol_nn_sr_nosym.t
+            x_simulated_NN_SR_nosym = sol_nn_sr_nosym.y[0]
+            x_dot_simulated_NN_SR_nosym = sol_nn_sr_nosym.y[1]
+            # check for NaNs or infs just in case
+            if np.any(np.isnan(x_simulated_NN_SR_nosym)) or np.any(np.isinf(x_simulated_NN_SR_nosym)):
+                print(f"Skipping trial {valid_trials}: NN-CC-SR simulation returned NaNs or infs.")
+
+        except Exception as e:
+            print(f"Skipping trial {valid_trials}: Exception during NN-CC-SR simulation -> {e}")
+
+        
+        end = time.time()  
+        elapsed = end - start
+        print(f"Solve_ivp finished in {elapsed:.3f} seconds")
+        
+
+        plt.figure()
+        plt.plot(t_NN_SR_nosym, x_simulated_NN_SR_nosym, label=r"NN-CC$_{+post\!\!-\!\!SR}$")
+        plt.plot(t_simulated_th, x_simulated_th, label="Theor.")
+        #plt.plot(time_data, x_data, label="true")
+        plt.legend()
+        plt.xlabel("Time")
+        plt.ylabel("x(t)")
+        plt.show()
+
+
+        ################ NN-CC+sym ###### 
+        def learned_dynamics(t, y):
+            x = torch.tensor([[y[0]]], dtype=torch.float32)
+            x_dot = torch.tensor([[y[1]]], dtype=torch.float32)
+            t_tensor = torch.tensor([[t]], dtype=torch.float32)
+            F_ext_tensor = torch.tensor([[F_ext(t)]], dtype=torch.float32)
+            model1.eval()
+            model2.eval()
+            with torch.no_grad(): # Neural net-based force computation
+                force = F_ext_tensor - model1(x_dot) - model2(x)
+            x_ddot = force.item()
+            return [y[1], x_ddot]  # dx/dt = x_dot, dx_dot/dt = x_ddot
+        print("Integrating NN")
+        start = time.time()  
+        x_simulated_NN=[]
+        x_dot_simulated_NN=[]
+        try:
+            sol = solve_ivp(learned_dynamics, t_span_val, y0_val, t_eval=t_val , method='LSODA') #,rtol=1e-7,atol=1e-7) #,  method='DOP853', rtol=1e-9, atol=1e-12)
+            x_simulated_NN = sol.y[0]
+            x_dot_simulated_NN = sol.y[1]            # check for NaNs or infs just in case
+            t_NN=sol.t
+            if np.any(np.isnan(x_simulated_NN)) or np.any(np.isinf(x_simulated_NN)):
+                print(f"Skipping trial {valid_trials}: NN simulation returned NaNs or infs.")
+        except Exception as e:
+            print(f"Skipping trial {valid_trials}: Exception during NN simulation -> {e}")
+        end = time.time()  
+        elapsed = end - start
+        print(f"Solve_ivp finished in {elapsed:.3f} seconds")
+
+        plt.figure()
+        plt.plot(t_NN, x_simulated_NN, label=r"NN-CC$_{+sym}$")
+        plt.plot(t_simulated_th, x_simulated_th, label="Theor.")
+        #plt.plot(time_data, x_data, label="true")
+        plt.legend()
+        plt.xlabel("t")
+        plt.ylabel("x(t)")
+        plt.show()
+
+
+        ################ NN+SR ###### validation of the model
+        print("Integrating NN-SR")
+
+        # For f1
+        expr_f1 = model_f1SR.sympy()
+        f1_lambda = sp.lambdify(sp.symbols("x0"), expr_f1, "numpy")
+        
+        expr_f1_smooth = expr_f1.replace(sp.sign, lambda arg: sp.tanh(500*arg))
+        expr_f1_smooth = expr_f1_smooth.replace(sp.Abs, lambda arg: sp.sqrt(arg**2+1e-6))
+        print(model_f1SR.sympy())
+        print(expr_f1_smooth)
+        f1_lambda = sp.lambdify(sp.symbols("x0"), expr_f1_smooth, "numpy")
+
+        # For f2
+        expr_f2 = model_f2SR.sympy()
+        f2_lambda = sp.lambdify(sp.symbols("x0"), expr_f2, "numpy")
+        def learned_dynamics_SR(t, y):
+            x_val = y[0]
+            x_dot_val = y[1]
+            F_ext_val = F_ext(t)
+            f1_val = f1_lambda(x_dot_val)
+            f2_val = f2_lambda(x_val)
+            x_ddot = F_ext_val - f1_val - f2_val
+            return [x_dot_val, x_ddot]
+        start = time.time()  
+        try:
+            sol_nn_sr = solve_ivp(learned_dynamics_SR, t_span_val, y0_val, 
+                              t_eval=t_val, method="LSODA") #Radau DOP853, rtol=1e-6, atol=1e-9)
+            t_NN_SR = sol_nn_sr.t
+            x_simulated_NN_SR = sol_nn_sr.y[0]
+            x_dot_simulated_NN_SR = sol_nn_sr.y[1]
+            # check for NaNs or infs just in case
+            if np.any(np.isnan(x_simulated_NN_SR)) or np.any(np.isinf(x_simulated_NN_SR)):
+                print(f"Skipping trial {valid_trials}: NN-CC+sym+post-SR simulation returned NaNs or infs.")
+
+        except Exception as e:
+            print(f"Skipping trial {valid_trials}: Exception during NN-CC+sym+post-SR simulation -> {e}")
+
+        
+        end = time.time()  
+        elapsed = end - start
+        print(f"Solve_ivp finished in {elapsed:.3f} seconds")
+        
+
+        plt.figure()
+        plt.plot(t_NN_SR, x_simulated_NN_SR, label=r"NN-CC$_{+sym+post\!\!-\!\!SR}$")
+        plt.plot(t_simulated_th, x_simulated_th, label="Theor.")
+        #plt.plot(time_data, x_data, label="true")
+        plt.legend()
+        plt.xlabel("Time")
+        plt.ylabel("x(t)")
+        plt.show()
+
+
+
+
+
+#        def custom_ticks(ax, major_x_interval, major_y_interval, minor_x_interval, minor_y_interval):
+#            # Set major ticks
+#            ax.xaxis.set_major_locator(ticker.MultipleLocator(major_x_interval))
+#            ax.yaxis.set_major_locator(ticker.MultipleLocator(major_y_interval))
+#            # Set minor ticks
+#            ax.xaxis.set_minor_locator(ticker.MultipleLocator(minor_x_interval))
+#            ax.yaxis.set_minor_locator(ticker.MultipleLocator(minor_y_interval))
+#            # Customize tick appearance
+#        #    ax.tick_params(axis='both', direction='in', which='major', length=8, width=1.5, labelsize=24)
+#        #    ax.tick_params(axis='both', direction='in', which='minor', length=5, width=1)
+#            ax.tick_params(axis='x', direction='in', which='major', length=8, width=1.5, labelsize=24, top=True, bottom=True)
+#            ax.tick_params(axis='y', direction='in', which='major', length=8, width=1.5, labelsize=24, left=True, right=True)
+#            ax.tick_params(axis='x', direction='in', which='minor', length=5, width=1, top=True,bottom=True)
+#            ax.tick_params(axis='y', direction='in', which='minor', length=5, width=1, left=True, right=True)
+
+
+
+        def custom_ticks(ax, major_x_interval, major_y_interval, minor_x_interval, minor_y_interval):
+            ax.xaxis.set_major_locator(ticker.MultipleLocator(major_x_interval))
+            ax.yaxis.set_major_locator(ticker.MultipleLocator(major_y_interval))
+            ax.xaxis.set_minor_locator(ticker.MultipleLocator(minor_x_interval))
+            ax.yaxis.set_minor_locator(ticker.MultipleLocator(minor_y_interval))
+            
+            ax.tick_params(axis='x', direction='in', which='major', length=8, width=1.5, labelsize=20, top=True, bottom=True)
+            ax.tick_params(axis='y', direction='in', which='major', length=8, width=1.5, labelsize=20, left=True, right=True)
+            ax.tick_params(axis='x', direction='in', which='minor', length=5, width=1, top=True, bottom=True)
+            ax.tick_params(axis='y', direction='in', which='minor', length=5, width=1, left=True, right=True)
+        
+        # 2. Setup the 1x3 Grid
+        fig, axs = plt.subplots(1, 3, figsize=(18, 5), sharey=True)
+        
+        # Data mapping for the three subplots
+        # Plot 1: NN-CC | Plot 2: NN-CC retrain | Plot 3: NN-CC-SR
+        methods_data = [x_simulated_NN_nosym, x_simulated_NN, x_simulated_NN_SR]
+        method_labels = ["NN-CC", r"NN-CC$_\text{+sym}$", r"NN-CC$_\text{+sym+post-SR}$"]
+        method_colors = ['magenta', 'teal', 'blue']
+        
+        for i in range(3):
+            ax = axs[i]
+            
+            ax.plot(t_val, methods_data[i], "-", color=method_colors[i], label=method_labels[i], linewidth=3)
+            ax.plot(t_val, x_simulated_th, '--',dashes=(1, 1), color='black', label="Theor.", linewidth=3)
+            
+            # Labels and Titles
+            ax.set_xlabel("$t$", fontsize=28)
+            if i == 0:
+                ax.set_ylabel("$x(t)$", fontsize=28)
+            
+            #ax.set_title(method_labels[i], fontsize=22)
+            ax.legend(fontsize=22, loc='upper right') # 'upper right'
+            
+            # Apply your custom styling
+            # Adjust intervals (20, 0.5) based on your data range
+            custom_ticks(ax, major_x_interval=10, major_y_interval=0.5, 
+                             minor_x_interval=5, minor_y_interval=0.25)
+            
+            # Optional: Add (a), (b), (c) markers
+            markers = ["(d)", "(e)", "(f)"]
+            #ax.text(0.97, 0.05, markers[i], transform=ax.transAxes, fontsize=28, va='bottom', ha='right')#, weight='bold'
+            ax.text(0.15, 0.05, markers[i], transform=ax.transAxes, fontsize=28, va='bottom', ha='right')#, weight='bold'
+        
+        plt.tight_layout()
+        
+        # 3. Save the figure
+        folder_path = output_path
+        os.makedirs(folder_path, exist_ok=True)
+        file_path = os.path.join(folder_path, "time_simulations_duffing_otherCI.pdf")
+        plt.savefig(file_path, format='pdf', bbox_inches='tight')
+        
+        plt.show()
+        print(f"Comparison plot saved to: {file_path}")
+       
+
+
+
+
+
+
+
+############### now integrating other ICs
+
+        #other initial conditions 
+        x0_val = 0.6
+        v0_val = -0.1 
+        y0_val = [x0_val, v0_val]
+        #Aext = np.round(np.random.uniform(0.45, 0.5),3)      
+        #Omega = np.round(np.random.uniform(1.1, 1.3),3)
+        
+ #       Aext = np.round(np.random.uniform(0.1, 0.5),3)
+ #       Omega = np.round(np.random.uniform(1.1, 1.3),3)
+        
+        #A = np.round(np.random.uniform(1.0, 1.5),3)
+        #Omega = np.round(np.random.uniform(0.2, 0.4),3)
+        #x0_val=x0-0.05
+        #v0_val=v0+0.01
+               
+        #Aext=0.3
+        #alpha=-1.0
+        #beta=1.0
+        #delta=0.3
+        #Omega=1.2
+        #x0=0.5
+        #v0=-0.5
+        #x0_val=x0
+        #y0_val=y0
+        #y0=[x0,v0]
+        #y0_val=y0
+        
+
+        #x0_val=-0.8 #x0
+        #v0_val=0.7 #v0
+        #y0_val = [x0_val,v0_val]
+        #y0_val = y0
+        
+        
+        #kval = np.random.uniform(0.5, 1.)
+        #cval = np.random.uniform(0.1, 0.5)
+        #m = 1.0
+        #mu_N = np.random.uniform(0.5, 1.0)
+        #print(f"Trial {i+1} : x0={x0_val:.4f} ; v0={v0_val:.4f}")
+        #print(r"$\A$="+f"{A:.4f} ; "+r"$\Omega$"+f"={Omega:.4f}")
+        print(f"Trial {attempts} :")
+        #print(f"alpha={alpha}, c={cval}")
+        #print(f"$\Omega$={Omega}, $\mu$*N={mu_N}, $x_0$={x0}, $v_0$={v0}")
+        #print(f"Omega={Omega}, A={A}, $x_0$={x0_val:.4f}, $v_0$={v0_val:.4f}")
+
+        #kval = np.round(np.random.uniform(1, 1.5),3)
+        #cval = np.round(np.random.uniform(0.1, 0.5),3)
+        #m = 1.0
+        #mu_N = np.round(np.random.uniform(0.5, 1.0),3)
+        #Omega = np.round(np.random.uniform(0.2, 0.5),3)
+        #x0 = np.round(np.random.uniform(-0.5, 0.5),3)
+        #v0 = np.round(np.random.uniform(-0.5, 0.5),3)
+
+
+
+        ################ Theoretical Eq ###### validation of the model
+        print("Integrating Theor.")
+        start = time.time()  
+        sol_val = solve_ivp(eq_2nd_ord_veloc, t_span_val, y0_val, t_eval=t_val,method='LSODA')
+        end = time.time()  
+        elapsed = end - start
+        print(f"Solve_ivp finished in {elapsed:.3f} seconds")
+        t_simulated_th = sol_val.t
+        x_simulated_th = sol_val.y[0]       
+        x_dot_simulated_th = sol_val.y[1]   
+        
+        #plt.figure()
+        #plt.plot(t_simulated_th, x_simulated_th, label="Validation: Theor. Integration")
+        #plt.legend()
+        #plt.xlabel("t")
+        #plt.ylabel("x(t)")
+        #plt.show()
+
+        if np.max(x_simulated_th)>np.max(x_data):
+            print("Extrapolation! max(x_sim)>max(x_train) :",np.max(x_simulated_th),">",np.max(x_data))
+        if np.min(x_simulated_th)<np.min(x_data):
+            print("Extrapolation! min(x_sim)<min(x_train) :",np.min(x_simulated_th),"<",np.min(x_data))
+
+        # --- CHECK BOUNDS ---
+        # Check if ANY point in the simulation goes outside the training box
+        is_out_x = np.any(x_simulated_th < np.min(x_data)) or np.any(x_simulated_th > np.max(x_data))
+        is_out_v = np.any(x_dot_simulated_th < np.min(x_dot_data)) or np.any(x_dot_simulated_th > np.max(x_dot_data))
+        
+        #if is_out_x or is_out_v:
+        #    # If outside, skip this trial (do not increment valid_trials)
+        #    print(f"Attempt {attempts}: Out of bounds. Retrying...") 
+        #    continue 
+        
+        # If we reach here, the curve is strictly inside the box
+        valid_trials += 1
+        print(f"Trial {valid_trials}/{n_trials} found (Attempt {attempts})")
+        
+
+
+
+
+        ################ parametric-CC ###### validation of the model
+        sol_parametric = solve_ivp(ode_param, t_span_val, y0_val, t_eval=t_val,method='LSODA')
+                        #rtol=1e-9, atol=1e-12, max_step=(t_eval[1] - t_eval[0]))   
+        t_parametric= sol_parametric.t
+        x_simulated_parametric = sol_parametric.y[0]
+        x_dot_simulated_parametric = sol_parametric.y[1]
+        plt.figure(figsize=(8,5))
+        plt.plot(t_parametric, x_simulated_parametric, "--", label="Parametric-CC", linewidth=2)
+        plt.plot(t_simulated_th, x_simulated_th, label="Theor.", linewidth=2)
+        plt.xlabel("t")
+        plt.ylabel("x(t)")
+        plt.legend()
+        plt.title("Parametric model simulation")
+        plt.show()
+
+
+        ################ NN-CC ###### 
+        def learned_dynamics(t, y):
+            x = torch.tensor([[y[0]]], dtype=torch.float32)
+            x_dot = torch.tensor([[y[1]]], dtype=torch.float32)
+            t_tensor = torch.tensor([[t]], dtype=torch.float32)
+            F_ext_tensor = torch.tensor([[F_ext(t)]], dtype=torch.float32)
+            model1_nosym.eval()
+            model2_nosym.eval()
+            with torch.no_grad(): # Neural net-based force computation
+                force = F_ext_tensor - model1_nosym(x_dot) - model2_nosym(x)
+            x_ddot = force.item()
+            return [y[1], x_ddot]  # dx/dt = x_dot, dx_dot/dt = x_ddot
+        print("Integrating NN")
+        start = time.time()  
+        x_simulated_NN=[]
+        x_dot_simulated_NN=[]
+        try:
+            sol = solve_ivp(learned_dynamics, t_span_val, y0_val, t_eval=t_val , method='LSODA') #,rtol=1e-7,atol=1e-7) #,  method='DOP853', rtol=1e-9, atol=1e-12)
+            x_simulated_NN_nosym = sol.y[0]
+            x_dot_simulated_NN_nosym = sol.y[1]            # check for NaNs or infs just in case
+            t_NN_nosym=sol.t
+            if np.any(np.isnan(x_simulated_NN_nosym)) or np.any(np.isinf(x_simulated_NN_nosym)):
+                print(f"Skipping trial {valid_trials}: NN simulation returned NaNs or infs.")
+        except Exception as e:
+            print(f"Skipping trial {valid_trials}: Exception during NN simulation -> {e}")
+        end = time.time()  
+        elapsed = end - start
+        print(f"Solve_ivp finished in {elapsed:.3f} seconds")
+
+        plt.figure()
+        plt.plot(t_NN_nosym, x_simulated_NN_nosym, label="NN-CC")
+        plt.plot(t_simulated_th, x_simulated_th, label="Theor.")
+        #plt.plot(time_data, x_data, label="true")
+        plt.legend()
+        plt.xlabel("t")
+        plt.ylabel("x(t)")
+        plt.show()
+
+
+
+        ################ NN+SR (nosym) ###### validation of the model
+        print("Integrating NN-CC nosym +post-SR")
+
+        # For f1
+        expr_f1_nosym = model_f1SR_nosym.sympy()
+        f1_nosym_lambda = sp.lambdify(sp.symbols("x0"), expr_f1_nosym, "numpy")
+        
+        expr_f1_nosym_smooth = expr_f1_nosym.replace(sp.sign, lambda arg: sp.tanh(500*arg))
+        expr_f1_nosym_smooth = expr_f1_nosym_smooth.replace(sp.Abs, lambda arg: sp.sqrt(arg**2+1e-6))
+        print(model_f1SR_nosym.sympy())
+        print(expr_f1_nosym_smooth)
+        f1_nosym_lambda = sp.lambdify(sp.symbols("x0"), expr_f1_nosym_smooth, "numpy")
+
+        # For f2
+        expr_f2_nosym = model_f2SR_nosym.sympy()
+        f2_nosym_lambda = sp.lambdify(sp.symbols("x0"), expr_f2_nosym, "numpy")
+        def learned_dynamics_SR_nosym(t, y):
+            x_val = y[0]
+            x_dot_val = y[1]
+            F_ext_val = F_ext(t)
+            f1_val = f1_nosym_lambda(x_dot_val)
+            f2_val = f2_nosym_lambda(x_val)
+            x_ddot = F_ext_val - f1_val - f2_val
+            return [x_dot_val, x_ddot]
+        start = time.time()  
+        try:
+            sol_nn_sr_nosym = solve_ivp(learned_dynamics_SR_nosym, t_span_val, y0_val, 
+                              t_eval=t_val, method="LSODA") #Radau DOP853, rtol=1e-6, atol=1e-9)
+            t_NN_SR_nosym = sol_nn_sr_nosym.t
+            x_simulated_NN_SR_nosym = sol_nn_sr_nosym.y[0]
+            x_dot_simulated_NN_SR_nosym = sol_nn_sr_nosym.y[1]
+            # check for NaNs or infs just in case
+            if np.any(np.isnan(x_simulated_NN_SR_nosym)) or np.any(np.isinf(x_simulated_NN_SR_nosym)):
+                print(f"Skipping trial {valid_trials}: NN-CC-SR simulation returned NaNs or infs.")
+
+        except Exception as e:
+            print(f"Skipping trial {valid_trials}: Exception during NN-CC-SR simulation -> {e}")
+
+        
+        end = time.time()  
+        elapsed = end - start
+        print(f"Solve_ivp finished in {elapsed:.3f} seconds")
+        
+
+        plt.figure()
+        plt.plot(t_NN_SR_nosym, x_simulated_NN_SR_nosym, label=r"NN-CC$_{+post\!\!-\!\!SR}$")
+        plt.plot(t_simulated_th, x_simulated_th, label="Theor.")
+        #plt.plot(time_data, x_data, label="true")
+        plt.legend()
+        plt.xlabel("Time")
+        plt.ylabel("x(t)")
+        plt.show()
+
+
+        ################ NN-CC+sym ###### 
+        def learned_dynamics(t, y):
+            x = torch.tensor([[y[0]]], dtype=torch.float32)
+            x_dot = torch.tensor([[y[1]]], dtype=torch.float32)
+            t_tensor = torch.tensor([[t]], dtype=torch.float32)
+            F_ext_tensor = torch.tensor([[F_ext(t)]], dtype=torch.float32)
+            model1.eval()
+            model2.eval()
+            with torch.no_grad(): # Neural net-based force computation
+                force = F_ext_tensor - model1(x_dot) - model2(x)
+            x_ddot = force.item()
+            return [y[1], x_ddot]  # dx/dt = x_dot, dx_dot/dt = x_ddot
+        print("Integrating NN")
+        start = time.time()  
+        x_simulated_NN=[]
+        x_dot_simulated_NN=[]
+        try:
+            sol = solve_ivp(learned_dynamics, t_span_val, y0_val, t_eval=t_val , method='LSODA') #,rtol=1e-7,atol=1e-7) #,  method='DOP853', rtol=1e-9, atol=1e-12)
+            x_simulated_NN = sol.y[0]
+            x_dot_simulated_NN = sol.y[1]            # check for NaNs or infs just in case
+            t_NN=sol.t
+            if np.any(np.isnan(x_simulated_NN)) or np.any(np.isinf(x_simulated_NN)):
+                print(f"Skipping trial {valid_trials}: NN simulation returned NaNs or infs.")
+        except Exception as e:
+            print(f"Skipping trial {valid_trials}: Exception during NN simulation -> {e}")
+        end = time.time()  
+        elapsed = end - start
+        print(f"Solve_ivp finished in {elapsed:.3f} seconds")
+
+        plt.figure()
+        plt.plot(t_NN, x_simulated_NN, label=r"NN-CC$_{+sym}$")
+        plt.plot(t_simulated_th, x_simulated_th, label="Theor.")
+        #plt.plot(time_data, x_data, label="true")
+        plt.legend()
+        plt.xlabel("t")
+        plt.ylabel("x(t)")
+        plt.show()
+
+
+        ################ NN+SR ###### validation of the model
+        print("Integrating NN-SR")
+
+        # For f1
+        expr_f1 = model_f1SR.sympy()
+        f1_lambda = sp.lambdify(sp.symbols("x0"), expr_f1, "numpy")
+        
+        expr_f1_smooth = expr_f1.replace(sp.sign, lambda arg: sp.tanh(500*arg))
+        expr_f1_smooth = expr_f1_smooth.replace(sp.Abs, lambda arg: sp.sqrt(arg**2+1e-6))
+        print(model_f1SR.sympy())
+        print(expr_f1_smooth)
+        f1_lambda = sp.lambdify(sp.symbols("x0"), expr_f1_smooth, "numpy")
+
+        # For f2
+        expr_f2 = model_f2SR.sympy()
+        f2_lambda = sp.lambdify(sp.symbols("x0"), expr_f2, "numpy")
+        def learned_dynamics_SR(t, y):
+            x_val = y[0]
+            x_dot_val = y[1]
+            F_ext_val = F_ext(t)
+            f1_val = f1_lambda(x_dot_val)
+            f2_val = f2_lambda(x_val)
+            x_ddot = F_ext_val - f1_val - f2_val
+            return [x_dot_val, x_ddot]
+        start = time.time()  
+        try:
+            sol_nn_sr = solve_ivp(learned_dynamics_SR, t_span_val, y0_val, 
+                              t_eval=t_val, method="LSODA") #Radau DOP853, rtol=1e-6, atol=1e-9)
+            t_NN_SR = sol_nn_sr.t
+            x_simulated_NN_SR = sol_nn_sr.y[0]
+            x_dot_simulated_NN_SR = sol_nn_sr.y[1]
+            # check for NaNs or infs just in case
+            if np.any(np.isnan(x_simulated_NN_SR)) or np.any(np.isinf(x_simulated_NN_SR)):
+                print(f"Skipping trial {valid_trials}: NN-CC+sym+post-SR simulation returned NaNs or infs.")
+
+        except Exception as e:
+            print(f"Skipping trial {valid_trials}: Exception during NN-CC+sym+post-SR simulation -> {e}")
+
+        
+        end = time.time()  
+        elapsed = end - start
+        print(f"Solve_ivp finished in {elapsed:.3f} seconds")
+        
+
+        plt.figure()
+        plt.plot(t_NN_SR, x_simulated_NN_SR, label=r"NN-CC$_{+sym+post\!\!-\!\!SR}$")
+        plt.plot(t_simulated_th, x_simulated_th, label="Theor.")
+        #plt.plot(time_data, x_data, label="true")
+        plt.legend()
+        plt.xlabel("Time")
+        plt.ylabel("x(t)")
+        plt.show()
+
+
+
+
+
+#        def custom_ticks(ax, major_x_interval, major_y_interval, minor_x_interval, minor_y_interval):
+#            # Set major ticks
+#            ax.xaxis.set_major_locator(ticker.MultipleLocator(major_x_interval))
+#            ax.yaxis.set_major_locator(ticker.MultipleLocator(major_y_interval))
+#            # Set minor ticks
+#            ax.xaxis.set_minor_locator(ticker.MultipleLocator(minor_x_interval))
+#            ax.yaxis.set_minor_locator(ticker.MultipleLocator(minor_y_interval))
+#            # Customize tick appearance
+#        #    ax.tick_params(axis='both', direction='in', which='major', length=8, width=1.5, labelsize=24)
+#        #    ax.tick_params(axis='both', direction='in', which='minor', length=5, width=1)
+#            ax.tick_params(axis='x', direction='in', which='major', length=8, width=1.5, labelsize=24, top=True, bottom=True)
+#            ax.tick_params(axis='y', direction='in', which='major', length=8, width=1.5, labelsize=24, left=True, right=True)
+#            ax.tick_params(axis='x', direction='in', which='minor', length=5, width=1, top=True,bottom=True)
+#            ax.tick_params(axis='y', direction='in', which='minor', length=5, width=1, left=True, right=True)
+
+
+
+        def custom_ticks(ax, major_x_interval, major_y_interval, minor_x_interval, minor_y_interval):
+            ax.xaxis.set_major_locator(ticker.MultipleLocator(major_x_interval))
+            ax.yaxis.set_major_locator(ticker.MultipleLocator(major_y_interval))
+            ax.xaxis.set_minor_locator(ticker.MultipleLocator(minor_x_interval))
+            ax.yaxis.set_minor_locator(ticker.MultipleLocator(minor_y_interval))
+            
+            ax.tick_params(axis='x', direction='in', which='major', length=8, width=1.5, labelsize=20, top=True, bottom=True)
+            ax.tick_params(axis='y', direction='in', which='major', length=8, width=1.5, labelsize=20, left=True, right=True)
+            ax.tick_params(axis='x', direction='in', which='minor', length=5, width=1, top=True, bottom=True)
+            ax.tick_params(axis='y', direction='in', which='minor', length=5, width=1, left=True, right=True)
+        
+        # 2. Setup the 1x3 Grid
+        fig, axs = plt.subplots(1, 3, figsize=(18, 5), sharey=True)
+        
+        # Data mapping for the three subplots
+        # Plot 1: NN-CC | Plot 2: NN-CC retrain | Plot 3: NN-CC-SR
+        methods_data = [x_simulated_NN_nosym, x_simulated_NN, x_simulated_NN_SR]
+        method_labels = ["NN-CC", r"NN-CC$_\text{+sym}$", r"NN-CC$_\text{+sym+post-SR}$"]
+        method_colors = ['magenta', 'teal', 'blue']
+        
+        for i in range(3):
+            ax = axs[i]
+            
+            ax.plot(t_val, methods_data[i], "-", color=method_colors[i], label=method_labels[i], linewidth=3)
+            ax.plot(t_val, x_simulated_th, '--',dashes=(1, 1), color='black', label="Theor.", linewidth=3)
+            
+            # Labels and Titles
+            ax.set_xlabel("$t$", fontsize=28)
+            if i == 0:
+                ax.set_ylabel("$x(t)$", fontsize=28)
+            
+            #ax.set_title(method_labels[i], fontsize=22)
+            ax.legend(fontsize=22, loc='upper right') # 'upper right'
+            
+            # Apply your custom styling
+            # Adjust intervals (20, 0.5) based on your data range
+            custom_ticks(ax, major_x_interval=10, major_y_interval=0.5, 
+                             minor_x_interval=5, minor_y_interval=0.25)
+            
+            # Optional: Add (a), (b), (c) markers
+            markers = ["(d)", "(e)", "(f)"]
+            #ax.text(0.97, 0.35, markers[i], transform=ax.transAxes, fontsize=28, va='bottom', ha='right')#, weight='bold'
+            ax.text(0.15, 0.05, markers[i], transform=ax.transAxes, fontsize=28, va='bottom', ha='right')#, weight='bold'
+        
+        plt.tight_layout()
+        
+        # 3. Save the figure
+        folder_path = output_path
+        os.makedirs(folder_path, exist_ok=True)
+        file_path = os.path.join(folder_path, "Fig6def_time_simulations_duffing_differentCI.pdf")
+        plt.savefig(file_path, format='pdf', bbox_inches='tight')
+        
+        plt.show()
+        print(f"Comparison plot saved to: {file_path}")
+       
+
+
+
+
+
+
+
