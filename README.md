@@ -35,7 +35,7 @@ The codebase covers the following identification strategies discussed in the pap
 
 ### Symbolic Regression Approaches
 * **SR:** Standard Symbolic Regression (using PySR) searching the full bivariate space $f(x, \dot{x})$.
-* **SR-CC:** Structured Symbolic Regression that strictly enforces the additive separation $f_1(\dot{x}) + f_2(x)$ via alternating optimization.
+* **SR-CC:** Structured SR version that strictly enforces the identification of univariate functions $f_1(\dot{x})$ and $f_2(x)$ through a nested outer loop optimization.
 
 
 ## Dependencies
@@ -60,9 +60,88 @@ pip install torch numpy scipy matplotlib pysindy==1.7.5 pysr
 
 
 
-## Citation
+## 🏛️ Citation
 
 If you use this code or methods in your research, please cite the associated manuscript.
+
+
+
+
+In case of using NN-CC method, additionally cite:
+  - Gonzalez, F. J. and Lara, L. P. "[Interpretable neural network system identification method for two families of second-order systems based on characteristic curves](https://doi.org/10.1007/s11071-025-11744-6)." Nonlinear Dyn. (2025)
+
+In case of using Poly-CC method, additionally cite:
+  - Gonzalez, F.J. "[Determination of the characteristic curves of a nonlinear first order system from fourier analysis](https://doi.org/10.1038/s41598-023-29151-5)." Sci. Rep., vol. 13, 1955, (2023).
+  - Gonzalez, F.J. "[System identification based on characteristic curves: a mathematical connection between power series and Fourier analysis for first-order nonlinear systems](https://doi.org/10.1007/s11071-024-09890-4)." Nonlinear Dyn. 112, 16167–16197 (2024).
+
+In case of using post-SR and/or SymbReg-CC methods, additionally cite:
+  - Cranmer, M. "[Interpretable Machine Learning for Science with PySR and SymbolicRegression.jl](https://doi.org/10.48550/arXiv.2305.01582)." arXiv preprint arXiv:2305.01582 (2023).
+
+
+
+
+
+## Citation BibTex
+
+
+```bibtex
+@article{Gonzalez2023,
+  title     = {Determination of the characteristic curves of a nonlinear first order system from Fourier analysis},
+  author    = {Gonzalez, Federico J.},
+  journal   = {Sci. Rep.},
+  publisher = {Springer Science and Business Media LLC},
+  volume    =  13,
+  number    =  1,
+  pages     = {1955},
+  month     =  feb,
+  year      =  2023,
+  doi =   {10.1038/s41598-023-29151-5},
+}
+
+@article{Gonzalez2024,
+  title = {System identification based on characteristic curves: a mathematical connection between power series and Fourier analysis for first-order nonlinear systems},
+  author = {{F. J. Gonzalez}},
+  volume = {112},
+  issn = {1573-269X},
+  doi = {10.1007/s11071-024-09890-4},
+  number = {18},
+  journal = {Nonlinear Dyn.},
+  publisher = {Springer Science and Business Media LLC},
+  year = {2024},
+  month = jul,
+  pages = {16167–16197}
+}
+
+@article{Gonzalez2025nody,
+  title = {{Interpretable neural network system identification method for two families of second-order systems based on characteristic curves}},
+  volume = {113},
+  ISSN = {1573-269X},
+  DOI = {10.1007/s11071-025-11744-6},
+  number = {24},
+  journal = {Nonlinear Dyn.},
+  publisher = {Springer Science and Business Media LLC},
+  author = {Gonzalez,  Federico J. and Lara,  Luis P.},
+  year = {2025},
+  month = sep,
+  pages = {33063–33086}
+}
+
+
+@article{Cranmer2023PySR,
+  title={Interpretable Machine Learning for Science with PySR and SymbolicRegression.jl},
+  author={Miles Cranmer},
+  journal={arXiv preprint arXiv:2305.01582},      
+  year={2023},
+  eprint={2305.01582},
+  url={https://arxiv.org/abs/2305.01582},
+}
+```
+
+
+### 🤝 We are open to collaborations and adding new possible features.
+Please share your [![Ideas](https://img.shields.io/badge/ideas-github-informational)](https://github.com/FedejGon/pyCC.id/discussions/categories/ideas) or reach out for a possible collaboration to:
+ - Federico J. Gonzalez: fgonzalez@ifir-conicet.gov.ar
+
 
 ## License
 
