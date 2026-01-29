@@ -33,7 +33,7 @@ pip install torch numpy scipy matplotlib pysindy==1.7.5 pysr
 
 ## Implemented Methods
 
-The codebase covers the following identification strategies discussed in the paper:
+The codes in the root folder provide basic implementation examples. For full reproducibility of the figures shown in the paper, please refer to the corresponding FigX folders. We implement the following methods:
 
 ### Neural Network Approaches (NN-CC)
 * **NN-CC:** Neural Network-based Characteristic Curves (baseline).
