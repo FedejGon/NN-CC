@@ -121,7 +121,6 @@ iv) In case of using SR-CC variants or post-SR, please cite:
   pages = {33063–33086}
 }
 
-
 @article{Cranmer2023PySR,
   title={Interpretable Machine Learning for Science with PySR and SymbolicRegression.jl},
   author={Miles Cranmer},
@@ -143,7 +142,6 @@ iv) In case of using SR-CC variants or post-SR, please cite:
   title = {PySINDy: A comprehensive Python package for robust sparse system identification}, 
   journal = {J. Open Source Softw.},
 }
-
 
 @article{Silva2020, 
   doi = {10.21105/joss.02104}, 
