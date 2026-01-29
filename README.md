@@ -22,16 +22,16 @@ The codebase covers the following identification strategies discussed in the pap
 
 ### Neural Network Approaches (NN-CC)
 * **NN-CC:** Neural Network-based Characteristic Curves (baseline).
-* **NN-CC$_{+sym}$:** NN-CC with symmetry constraints enforced via the loss function.
-* **NN-CC$_{+post-SR}$:** NN-CC with Symbolic Regression (PySR) as a post-processing step.
-* **NN-CC$_{+sym+post-SR}$:** The combined approach using both symmetry priors and symbolic refinement.
+* **NN-CC<sub>+sym</sub>:** NN-CC with symmetry constraints enforced via the loss function.
+* **NN-CC<sub>+post-SR</sub>:** NN-CC with Symbolic Regression (PySR) as a post-processing step.
+* **NN-CC<sub>+sym+post-SR</sub>:** The combined approach using both symmetry priors and symbolic refinement.
 
 ### Sparse Regression Approaches (SINDy) and least-squares with Polynomial basis (Poly-CC) 
 * **Poly-CC:** Characteristic curves represented by fixed polynomial basis functions.
 * **SINDy:** Standard Sparse Identification of Nonlinear Dynamics.
 * **SINDy-CC:** SINDy constrained to the specific additive structure of the Characteristic Curves ($k_0=1$).
-* **SINDy-CC$_{+sym}$:** SINDy-CC with a candidate library restricted to symmetric terms (e.g., odd polynomials).
-* **SINDy-CC$_{+sym+post-SR}$:** A hybrid approach applying symbolic regression to the sparse regression results.
+* **SINDy-CC<sub>+sym</sub>:** SINDy-CC with a candidate library restricted to symmetric terms (e.g., odd polynomials).
+* **SINDy-CC<sub>+sym+post-SR</sub>:** A hybrid approach applying symbolic regression to the sparse regression results.
 
 ### Symbolic Regression Approaches
 * **SR:** Standard Symbolic Regression (using PySR) searching the full bivariate space $f(x, \dot{x})$.
