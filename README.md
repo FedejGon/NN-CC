@@ -56,7 +56,8 @@ The codes in the root folder provide basic implementation examples. For full rep
 
 In case of using or adapting some of the codes or methods in your research, please cite the associated manuscript.
 
-Additionally:
+### Additionally:
+
 i) In case of using NN-CC method, please cite:
   - Gonzalez, F. J. and Lara, L. P. "[Interpretable neural network system identification method for two families of second-order systems based on characteristic curves](https://doi.org/10.1007/s11071-025-11744-6)." Nonlinear Dyn. 113, 33063–33086 (2025).
 
