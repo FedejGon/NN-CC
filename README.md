@@ -7,10 +7,9 @@ https://doi.org/10.48550/arXiv.2601.21720)." arXiv:2601.21720 (2026).
 
 ## 📖 Overview
 
-This work introduces a modular framework for identifying nonlinear dynamical systems by decomposing dynamics into interpretable **Characteristic Curves (CCs)**.  implements the **NN-CC** method and its variants based on PyTorch, and variants of **SINDy** and **Symbolic Regression (SR)**  them against standard approaches like SINDy and Symbolic Regression (SR).
+This repository presents the source code for the referenced paper, which introduces a modular framework for equation discovery based on prior knowledge of the system. The approach decomposes the dynamics into interpretable **Characteristic Curves (CCs)**.  
 
-
-Crucially, this framework allows practitioners to explicitly embed domain expertise, such as geometric symmetries, directly into the learning process. It also features a post-processing stage where the learned curves are converted into analytical expressions using Symbolic Regression.
+Crucially, the framework allows practitioners to explicitly incorporate domain expertise (such as geometric symmetries) directly into the learning process. It also features a post-processing stage in which the learned CCs are converted into analytical expressions using Symbolic Regression (post-SR).
 
 The repository includes scripts to reproduce the results for two benchmark systems:
 1.  **Chaotic Duffing Oscillator:** A continuous system with polynomial nonlinearities.
