@@ -2,7 +2,8 @@
 
 This repository contains the source codes associated with the manuscript:
 
-**"Integrating prior knowledge in equation discovery: Interpretable symmetry-informed neural networks and symbolic regression via characteristic curves"**
+"[Integrating prior knowledge in equation discovery: Interpretable symmetry-informed neural networks and symbolic regression via characteristic curves]( 	
+https://doi.org/10.48550/arXiv.2601.21720)." arXiv:2601.21720 (2026).
 
 ## 📖 Overview
 
