@@ -54,7 +54,10 @@ The codes in the root folder provide basic implementation examples. For full rep
 
 ## 🏛️ Citation
 
-In case of using or adapting some of the codes or methods in your research, please cite the associated manuscript.
+In case of using or adapting some of the codes or methods in your research, please cite:
+  - Gonzalez, F. J. "[Integrating prior knowledge in equation discovery: Interpretable symmetry-informed neural networks and symbolic regression via characteristic curves]( 	
+https://doi.org/10.48550/arXiv.2601.21720)." arXiv preprint arXiv:2601.21720 (2026).
+
 
 ### Additionally:
 
@@ -80,17 +83,28 @@ iv) In case of using SR-CC variants or post-SR, please cite:
 
 
 ```bibtex
-@article{Gonzalez2023,
-  title     = {Determination of the characteristic curves of a nonlinear first order system from Fourier analysis},
-  author    = {Gonzalez, Federico J.},
-  journal   = {Sci. Rep.},
+@article{Gonzalez2026,
+  title={Integrating prior knowledge in equation discovery: Interpretable symmetry-informed neural networks and symbolic regression via characteristic curves}, 
+  author={Federico J. Gonzalez},
+  year={2026},
+  eprint={2601.21720},
+  archivePrefix={arXiv},
+  primaryClass={nlin.CD},
+  url={https://arxiv.org/abs/2601.21720}, 
+}
+
+@article{Gonzalez2025,
+  title = {{Interpretable neural network system identification method for two families of second-order systems based on characteristic curves}},
+  volume = {113},
+  ISSN = {1573-269X},
+  DOI = {10.1007/s11071-025-11744-6},
+  number = {24},
+  journal = {Nonlinear Dyn.},
   publisher = {Springer Science and Business Media LLC},
-  volume    =  13,
-  number    =  1,
-  pages     = {1955},
-  month     =  feb,
-  year      =  2023,
-  doi =   {10.1038/s41598-023-29151-5},
+  author = {Gonzalez,  Federico J. and Lara,  Luis P.},
+  year = {2025},
+  month = sep,
+  pages = {33063–33086}
 }
 
 @article{Gonzalez2024,
@@ -107,18 +121,17 @@ iv) In case of using SR-CC variants or post-SR, please cite:
   pages = {16167–16197}
 }
 
-@article{Gonzalez2025,
-  title = {{Interpretable neural network system identification method for two families of second-order systems based on characteristic curves}},
-  volume = {113},
-  ISSN = {1573-269X},
-  DOI = {10.1007/s11071-025-11744-6},
-  number = {24},
-  journal = {Nonlinear Dyn.},
+@article{Gonzalez2023,
+  title     = {Determination of the characteristic curves of a nonlinear first order system from Fourier analysis},
+  author    = {Gonzalez, Federico J.},
+  journal   = {Sci. Rep.},
   publisher = {Springer Science and Business Media LLC},
-  author = {Gonzalez,  Federico J. and Lara,  Luis P.},
-  year = {2025},
-  month = sep,
-  pages = {33063–33086}
+  volume    =  13,
+  number    =  1,
+  pages     = {1955},
+  month     =  feb,
+  year      =  2023,
+  doi =   {10.1038/s41598-023-29151-5},
 }
 
 @article{Cranmer2023PySR,
